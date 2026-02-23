@@ -15,9 +15,17 @@
 The biggest resource hogs will be **ZFS itself** and **PostgreSQL**.
 
 ### ⚖️ Impact of Super Admin Add-ons (Phase 2)
-The advanced enterprise features outlined in Phase 2 won't break this server, but require one specific consideration:
-- **Logical Features (SaaS Billing, Templates, God Mode, Analytics):** These are simply extra database queries and FastAPI logic. The i3-3210 will handle these without breaking a sweat.
-- **Live Telemetry & APM:** This is the only bottleneck. Self-hosting an APM stack (like Sentry, Datadog-agent, or Grafana) is incredibly RAM-heavy. With only 8GB total RAM (4GB locked by ZFS), you **cannot** safely self-host a full APM stack on this machine. You must use a *cloud-hosted* APM (like the hosted Sentry SaaS free tier) and just point your FastAPI container to it.
+The advanced enterprise features outlined in Phase 2 won't break this server, but require specific considerations:
+
+**🟢 Low Impact (Logical Features)**
+- **Automated SaaS Billing:** Handled effortlessly by database queries and Fast API cron jobs.
+- **Master Agency Pre-Seeding:** Occurs only once per onboarding; negligible impact.
+- **Secure Tenant Impersonation (God Mode):** Simple JWT override mechanism; negligible impact.
+- **Platform Analytics Engine:** Simple database aggregation queries; negligible impact.
+
+**🔴 High Impact (Global Telemetry)**
+- **Live Telemetry & APM:** This is the *only* bottleneck. Self-hosting an APM stack (like Sentry, Datadog-agent, or Grafana) is incredibly RAM-heavy. 
+- **The Verdict on APM:** With only 8GB total RAM (4GB locked by ZFS), you **cannot** safely self-host a full APM stack on this machine. You must use a *cloud-hosted* APM (like the hosted Sentry SaaS free tier) and just point your FastAPI container to it.
 
 ---
 
@@ -59,7 +67,12 @@ Using a **Cloudflare Tunnel (`cloudflared`)** instead of port-forwarding your ho
 
 1. **Storage Pool 1 (Fast):** Setup the 250GB SSD and install the `ix-applications` (Docker/K3s dataset) onto it.
 2. **Storage Pool 2 (Slow):** Setup the 3x 500GB HDDs in RAID Z1 as an SMB network share / backup target.
-3. **TrueNAS Apps vs Custom Docker Compose:**
-   - If using TrueNAS Scale, you can use the "Custom App" to deploy your `docker-compose.yml`, allocating container memory caps easily.
-   - Alternatively, spin up a lightweight Debian/Ubuntu VM (allocating exactly 2 CPU cores and 3GB of RAM), mount the SSD dataset via virtio, and run plain Docker Engine. (This is generally simpler than managing the TrueNAS Scale Kubernetes engine).
-4. **Cloudflare Tunnel App:** Install the truecharts/official Cloudflare Tunnel app (or standalone docker container) and connect it to your Cloudflare dashboard using your tunnel token to route traffic freely to your apps.
+3. **Container Allocation (Phase 1):**
+   - Spin up a lightweight Debian/Ubuntu VM (allocating exactly 2 CPU cores and 3GB of RAM).
+   - Mount the SSD dataset via virtio and run plain Docker Engine. 
+   - Deploy your `docker-compose.yml` (PostgreSQL, FastAPI, React PWA, Celery/Redis).
+4. **Cloudflare Tunnel App:** Install the official Cloudflare Tunnel app (or standalone docker container) and connect it to your Cloudflare dashboard using your tunnel token to route traffic to your apps without exposing ports.
+5. **Phase 2 Expansion (Add-ons):**
+   - **SaaS Billing:** Configure Stripe/Razorpay webhooks in FastAPI. Requires zero hardware changes.
+   - **God Mode & Master Templates:** Implement logical changes in the backend database. Requires zero hardware changes.
+   - **Metrics & APM:** Create a free account on Sentry (or equivalent cloud service) and configure the FastAPI DSN to ship telemetry externally to prevent local memory exhaustion.
