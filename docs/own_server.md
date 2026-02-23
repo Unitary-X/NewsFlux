@@ -14,6 +14,11 @@
 **A React PWA** is static; serving it takes virtually no CPU or memory.
 The biggest resource hogs will be **ZFS itself** and **PostgreSQL**.
 
+### ⚖️ Impact of Super Admin Add-ons (Phase 2)
+The advanced enterprise features outlined in Phase 2 won't break this server, but require one specific consideration:
+- **Logical Features (SaaS Billing, Templates, God Mode, Analytics):** These are simply extra database queries and FastAPI logic. The i3-3210 will handle these without breaking a sweat.
+- **Live Telemetry & APM:** This is the only bottleneck. Self-hosting an APM stack (like Sentry, Datadog-agent, or Grafana) is incredibly RAM-heavy. With only 8GB total RAM (4GB locked by ZFS), you **cannot** safely self-host a full APM stack on this machine. You must use a *cloud-hosted* APM (like the hosted Sentry SaaS free tier) and just point your FastAPI container to it.
+
 ---
 
 ## 🏗️ Hardware Allocation Strategy (CRITICAL)
@@ -21,15 +26,15 @@ The biggest resource hogs will be **ZFS itself** and **PostgreSQL**.
 ### 1. Storage Layout (The SSD is the MVP)
 Your 3x 500GB HDDs in a RAID Z1 configuration will give you about 1TB of usable storage, but **Hard Drives have incredibly poor random I/O (IOPS)**. A database (like PostgreSQL) performs thousands of tiny random reads/writes. If you put PostgreSQL on the HDD pool, the application will feel sluggish and API responses will lag.
 
-**✅ Execution Plan:**
-- Use the **1x 250GB SSD** as a separate storage pool dedicated strictly to your TrueNAS Apps (Docker containers) and the **PostgreSQL database volumes**. Fast SSD IOPS are critical for a snappy database.
-- Use the **3x 500GB HDD RAID Z1** purely as a static file backup destination (e.g., configuring your daily automated Google Drive CSV exports or pg_dump `.sql.gz` files to land here first).
+ **✅ Execution Plan:**
+ - Use the **1x 250GB SSD** as a separate storage pool dedicated strictly to your TrueNAS Apps (Docker containers) and the **PostgreSQL database volumes**. Fast SSD IOPS are critical for a snappy database.
+ - Use the **3x 500GB HDD RAID Z1** purely as a static file backup destination (e.g., configuring your daily automated Google Drive CSV exports or pg_dump `.sql.gz` files to land here first).
 
-### 2. RAM Management (The 8GB Bottleneck)
+ ### 2. RAM Management (The 8GB Bottleneck)
 TrueNAS uses the ZFS file system, which aggressively caches data in RAM (the ARC cache). By default, ZFS will consume up to 50% of your total RAM (4GB out of your 8GB), leaving only 4GB for the TrueNAS OS layer, Docker Engine, PostgreSQL, FastAPI, and Redis/Celery.
 
-**✅ Execution Plan:**
-- **Limit PostgreSQL Memory:** Set strict memory limits on your database container (e.g., `512MB` or `1GB` max limit in your Docker Compose).
+ **✅ Execution Plan:**
+ - **Limit PostgreSQL Memory:** Set strict memory limits on your database container (e.g., `512MB` or `1GB` max limit in your Docker Compose).
 - **Tune Postgres Config:** Modify the PostgreSQL `postgresql.conf` file to keep `shared_buffers` extremely low (e.g., `128MB`). Let the OS/ZFS manage the disk caching.
 - Ensure the FastAPI container is strictly limited to prevent a memory leak from taking down your entire TrueNAS server.
 

@@ -229,3 +229,15 @@ Authorization: Bearer <jwt_admin_token>
 4. **Google Drive Integration Strategy**
    - Use OAuth 2.0 User Consent flow for individual Agencies (so CSVs save directly to the agency owner's personal Drive).
    - Use a Google Service Account for the Super Admin full DB pg_dump.
+
+---
+
+## 8. 🚀 Phase 2 Architecture (Super Admin Add-ons)
+
+To support long-term scalability and SaaS monetization, the following architecture extensions are planned for Phase 2:
+
+1. **Automated SaaS Billing Engine:** Integration with Stripe/Razorpay via webhooks to automate tenant subscription tiers and auto-suspend inactive accounts.
+2. **Global Telemetry & APM:** Integration with cloud-hosted Sentry/Datadog to monitor P99 latency, 500-error spikes, and database connection pooling.
+3. **Master Agency Pre-Seeding:** Automated database seeding during tenant provisioning to populate the top 20 regional newspapers instantly.
+4. **Secure Tenant Impersonation (God Mode):** A stateless JWT override mechanism enabling Super Admins to view the platform as an Agency Admin, safeguarded by strict `audit_logs` tracking.
+5. **Platform Analytics Engine:** Centralized views aggregating active vs. churned agencies and total end-customers across the shared schema.
