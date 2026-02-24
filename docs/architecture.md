@@ -222,11 +222,14 @@ Authorization: Bearer <jwt_admin_token>
 
 1. **Row Level Security (RLS)**
    - Do not rely solely on the application layer to filter `tenant_id`. Implement PostgreSQL RLS as a secondary defense layer so the database physically prevents cross-tenant data leaks even if an API route forgets the `where(tenant_id=X)` clause.
-2. **Offline-First Foreign Keys (UUIDv4)**
-   - Use UUIDs instead of auto-incrementing integers. This allows the Worker PWA to generate IDs locally while offline and safely push them to the DB later without ID conflicts.
-3. **Immutable History for Billing**
-   - Because billing is based on historical daily prices, if an Admin changes the price of a newspaper on the 15th, previous deliveries must remain at the old price. Create a specific `daily_pricing_snapshots` table or structure the queries to rely strictly on the `audit_logs` historical prices.
-4. **Google Drive Integration Strategy**
+2. **Offline-First Foreign Keys (UUIDv4) [PHASE 1]**
+   - Use UUIDs instead of auto-incrementing integers. This allows the Worker PWA to generate IDs locally while offline and safely push them to the DB later without ID conflicts. Protects against IDOR attacks.
+3. **Immutable History for Billing & Auditing [PHASE 1]**
+   - Implement a strict `audit_logs` table tracking critical actions (e.g., "PRICE_UPDATE", "STOCK_EDIT").
+   - Because billing is based on historical daily prices, it must strictly rely on historical snapshots or these logs, making previous financial records immutable to accidental or malicious changes.
+4. **Secure Tenant Impersonation (God Mode) [PHASE 1]**
+   - A stateless JWT override mechanism enabling Super Admins to view the platform as an Agency Admin to fix bugs without sharing passwords. Safeguarded by strict `audit_logs` tracking tagging actions as "SuperAdmin [Name] impersonating Admin [Name]".
+5. **Google Drive Integration Strategy**
    - Use OAuth 2.0 User Consent flow for individual Agencies (so CSVs save directly to the agency owner's personal Drive).
    - Use a Google Service Account for the Super Admin full DB pg_dump.
 
@@ -239,5 +242,4 @@ To support long-term scalability and SaaS monetization, the following architectu
 1. **Automated SaaS Billing Engine:** Integration with Stripe/Razorpay via webhooks to automate tenant subscription tiers and auto-suspend inactive accounts.
 2. **Global Telemetry & APM:** Integration with cloud-hosted Sentry/Datadog to monitor P99 latency, 500-error spikes, and database connection pooling.
 3. **Master Agency Pre-Seeding:** Automated database seeding during tenant provisioning to populate the top 20 regional newspapers instantly.
-4. **Secure Tenant Impersonation (God Mode):** A stateless JWT override mechanism enabling Super Admins to view the platform as an Agency Admin, safeguarded by strict `audit_logs` tracking.
-5. **Platform Analytics Engine:** Centralized views aggregating active vs. churned agencies and total end-customers across the shared schema.
+4. **Platform Analytics Engine:** Centralized views aggregating active vs. churned agencies and total end-customers across the shared schema.

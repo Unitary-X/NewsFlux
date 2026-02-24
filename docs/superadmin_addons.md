@@ -38,9 +38,9 @@ As the Platform Owner, the Super Admin's focus is on **monetization, system heal
 - **Functionality:** The system automatically seeds the new tenant's database with the 20 most popular newspapers and average market prices, saving the new Agency Admin 3 hours of data entry on day one.
 - **Benefit:** Drastically improves the "Time to Value" (TTV) for newly onboarded clients, making them love the software immediately.
 
-## 🔒 5. Impersonation Mode (God Mode)
+## 🔒 5. Impersonation Mode (God Mode) [MOVED TO PHASE 1]
 *Problem:* An Agency Admin calls support saying, "I can't see the billing report for Customer X, it's missing."
-*Add-on:* **Secure Tenant Impersonation**
+*Add-on:* **Secure Tenant Impersonation (Phase 1 Core Feature)**
 - **Feature:** A dedicated "Log in as this Admin" securely built for the Super Admin.
 - **Functionality:** The Super Admin clicks a button that temporarily overrides their JWT token with the target agency's `tenant_id` and the `admin` role. The Super Admin sees *exactly* what the Agency Admin sees on their screen.
 - **Security Rule:** Every action performed while impersonating MUST be logged in the `audit_logs` specifically tagged as "SuperAdmin [Name] impersonating Admin [Name]".
