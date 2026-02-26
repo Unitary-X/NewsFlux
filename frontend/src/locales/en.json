@@ -1,0 +1,12 @@
+{
+    "welcome": "Welcome to NewsFlux",
+    "login": {
+        "title": "Sign In to NewsFlux",
+        "username": "Username",
+        "password": "Password",
+        "submit": "Sign In",
+        "error": "Invalid credentials",
+        "logging_in": "Signing In..."
+    },
+    "dashboard": "Dashboard"
+}
