@@ -1,9 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from contextlib import asynccontextmanager
 from app.core.middleware import TenantMiddleware
+from app.core.init_db import init_db
 
-app = FastAPI(title="NewsFlux Backend", description="Multi-Tenant B2B SaaS Backend", version="1.0.0")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # Initialize the core database schema records on startup
+    init_db()
+    yield
 
+app = FastAPI(title="NewsFlux Backend", description="Multi-Tenant B2B SaaS Backend", version="1.0.0", lifespan=lifespan)
 # Setup CORS
 app.add_middleware(
     CORSMiddleware,
@@ -28,9 +35,3 @@ app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin Portal"])
 app.include_router(worker.router, prefix="/api/v1/worker", tags=["Worker PWA"])
 app.include_router(superadmin.router, prefix="/api/v1/superadmin", tags=["Platform Admin"])
 
-from seed import seed_database
-
-@app.get("/seed")
-def run_seed():
-    seed_database()
-    return {"message": "Database seeded successfully"}
