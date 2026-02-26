@@ -1,5 +1,5 @@
 import logging
-from app.db.database import SessionLocal
+from app.api.dependencies import SessionLocal
 from app.models.models import User
 from app.core.security import get_password_hash
 
