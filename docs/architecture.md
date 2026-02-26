@@ -124,17 +124,22 @@ A **Unified Single Page Application (SPA)** using React (Vite). Instead of separ
 1. **Central Login Portal:**
    - A single `/login` route. Upon successful authentication, the backend determines the user's role (`super_admin`, `admin`, or `worker`), and the React Router dynamically redirects them to the correct interface.
 
-2. **Worker Interface (`/worker/*`):**
+2. **Multi-Language Support (i18n):**
+   - **Strategy:** Utilizing the industry-standard `react-i18next` library for seamless English and Tamil translation.
+   - **Implementation:** Translation text is stored in separate, standard JSON files (e.g., `en.json`, `ta.json`). Components use the `useTranslation()` hook to swap labels dynamically, allowing for full UI translations without modifying core layout logic, routing, or the backend database.
+
+3. **Worker Interface (`/worker/*`):**
    - Mobile First, Offline Support via PWA.
    - `components/StepperInput.tsx` (Large `[-] [10] [+]` buttons targeting 48px+ touch targets).
    - *Logic*: Uses `IndexedDB` (via Dexie.js or React Query) to cache offline updates. Service workers manage background syncing when `navigator.onLine` turns true.
 
-3. **Admin Interface (`/admin/*`):**
-   - Desktop Ledger UI.
+4. **Admin Interface (`/admin/*`):**
+   - Desktop Ledger UI with Offline Support.
    - `components/StockTable.tsx` (DataGrid style, dense ledger readability).
-   - *Logic*: High contrast, dense information architecture optimized for fast keyboard data entry.
+   - *Logic*: High contrast, dense information architecture optimized for fast keyboard data entry. 
+   - *Offline Sync*: Like the worker App, utilizes `IndexedDB` caching securely to store bulk data entries (e.g., modifying multiple customers or entering large morning stock shipments offline). Service Workers automatically resolve the batch queue API once internet connection is restored.
 
-4. **Super Admin Interface (`/superadmin/*`):**
+5. **Super Admin Interface (`/superadmin/*`):**
    - Dark Futuristic "Antigravity" UI.
    - `components/NeonMetricsCard.tsx` (Glassmorphism layout with blur backdrops).
    - *Logic*: Immersive dashboards for global telemetry and agency monitoring.

@@ -8,7 +8,7 @@ This document details the essential business modules and the exact page configur
 
 ### 📰 1. Newspaper Management
 - Centralized list of newspapers.
-- Multi-language support.
+- **Multi-Language Support (i18n):** Native integration using `react-i18next` for seamless dynamic label translation across the platform without altering database schema.
 - Admin-controlled base pricing algorithms.
 
 ### 📦 2. Stock Management
