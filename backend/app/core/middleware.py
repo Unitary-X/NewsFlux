@@ -4,13 +4,14 @@ from starlette.responses import JSONResponse
 from jose import jwt, JWTError
 from app.core.config import settings
 import logging
+import uuid
 
 logger = logging.getLogger(__name__)
 
 class TenantMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Allow open routes like login and docs
-        open_routes = ["/api/v1/auth/login", "/api/v1/auth/register", "/docs", "/openapi.json"]
+        open_routes = ["/health", "/api/v1/auth/login", "/api/v1/auth/register", "/docs", "/openapi.json"]
         if request.url.path in open_routes:
             return await call_next(request)
 
@@ -23,11 +24,18 @@ class TenantMiddleware(BaseHTTPMiddleware):
 
         try:
             payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
-            tenant_id = payload.get("tenant_id")
+            tenant_id_raw = payload.get("tenant_id")
             role = payload.get("role")
             
-            # Inject into request state so downstream routes can access it safely
-            request.state.tenant_id = tenant_id
+            # Convert tenant_id string to UUID object for SQLAlchemy Uuid columns
+            if tenant_id_raw:
+                try:
+                    request.state.tenant_id = uuid.UUID(tenant_id_raw)
+                except (ValueError, AttributeError):
+                    request.state.tenant_id = tenant_id_raw
+            else:
+                request.state.tenant_id = None
+            
             request.state.role = role
             request.state.user_id = payload.get("sub")
             
