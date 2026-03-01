@@ -3,9 +3,16 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from app.core.middleware import TenantMiddleware
 from app.core.init_db import init_db
+from app.core.config import settings
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # Auto-create tables for SQLite (local dev without alembic)
+    if settings.DATABASE_URL.startswith("sqlite"):
+        from app.db.base_class import Base
+        from app.api.dependencies import engine
+        import app.models.models  # noqa: ensure models are registered
+        Base.metadata.create_all(bind=engine)
     # Initialize the core database schema records on startup
     init_db()
     yield
