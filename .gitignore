@@ -29,6 +29,9 @@ dist-ssr/
 *.sw?
 .DS_Store
 
+# Database
+*.db
+
 # Logs
 *.log
 npm-debug.log*
