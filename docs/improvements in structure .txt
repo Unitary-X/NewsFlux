@@ -1,0 +1,6 @@
+Fine-Tuning the Role Permissions
+To keep the Super Admin out of the "daily weeds" while maintaining security, consider these constraints:
+
+Data Isolation: Use a tenant_id on every table. This ensures Agency A can never accidentally see Agency B's customers, even if there is a bug in the UI.
+
+Worker Verification: Instead of just "Entering" returns, you might want a "Conflict Flag." If a worker claims they returned 10 papers but the Admin only counted 5, the system should highlight that row in Red for reconciliation.
