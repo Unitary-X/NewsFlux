@@ -15,6 +15,9 @@
         "newspapers": "Newspapers",
         "workers": "Workers",
         "customers": "Customers",
+        "subscriptions": "Subscriptions",
+        "assignments": "Assignments",
+        "billing": "Billing",
         "agency_menu": "Agency Menu",
         "sign_out": "Sign Out",
         "agency_id": "Agency ID"

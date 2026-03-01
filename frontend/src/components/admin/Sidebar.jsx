@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe } from 'lucide-react';
+import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, BookOpen, Route, Receipt } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -18,6 +18,9 @@ export default function Sidebar() {
         { to: "/admin/newspapers", label: t('sidebar.newspapers'), icon: Newspaper },
         { to: "/admin/workers", label: t('sidebar.workers'), icon: UserSquare2 },
         { to: "/admin/customers", label: t('sidebar.customers'), icon: Users },
+        { to: "/admin/subscriptions", label: t('sidebar.subscriptions') || 'Subscriptions', icon: BookOpen },
+        { to: "/admin/assignments", label: t('sidebar.assignments') || 'Assignments', icon: Route },
+        { to: "/admin/billing", label: t('sidebar.billing') || 'Billing', icon: Receipt },
     ];
 
     return (

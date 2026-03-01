@@ -7,6 +7,9 @@ import StockTable from './pages/admin/StockTable';
 import Newspapers from './pages/admin/Newspapers';
 import Workers from './pages/admin/Workers';
 import Customers from './pages/admin/Customers';
+import Subscriptions from './pages/admin/Subscriptions';
+import Assignments from './pages/admin/Assignments';
+import Billing from './pages/admin/Billing';
 import WorkerDashboard from './pages/worker/Dashboard';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
 import SuperAdminAgencies from './pages/superadmin/Agencies';
@@ -55,6 +58,9 @@ function App() {
             <Route path="newspapers" element={<Newspapers />} />
             <Route path="workers" element={<Workers />} />
             <Route path="customers" element={<Customers />} />
+            <Route path="subscriptions" element={<Subscriptions />} />
+            <Route path="assignments" element={<Assignments />} />
+            <Route path="billing" element={<Billing />} />
           </Route>
 
           {/* Worker Routes */}
