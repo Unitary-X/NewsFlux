@@ -9,7 +9,13 @@ import Workers from './pages/admin/Workers';
 import Customers from './pages/admin/Customers';
 import WorkerDashboard from './pages/worker/Dashboard';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
+import SuperAdminAgencies from './pages/superadmin/Agencies';
+import SuperAdminAnalytics from './pages/superadmin/Analytics';
+import SuperAdminAuditLogs from './pages/superadmin/AuditLogs';
+import SuperAdminSystemHealth from './pages/superadmin/SystemHealth';
+import SuperAdminSettings from './pages/superadmin/Settings';
 import AdminLayout from './components/admin/AdminLayout';
+import SuperAdminLayout from './components/superadmin/SuperAdminLayout';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user } = useAuth();
@@ -63,17 +69,22 @@ function App() {
             }
           />
 
-          {/* Super Admin Routes */}
+          {/* Super Admin Routes with Sidebar Layout */}
           <Route
             path="/superadmin/*"
             element={
               <ProtectedRoute allowedRoles={['super_admin']}>
-                <Routes>
-                  <Route path="/" element={<SuperAdminDashboard />} />
-                </Routes>
+                <SuperAdminLayout />
               </ProtectedRoute>
             }
-          />
+          >
+            <Route index element={<SuperAdminDashboard />} />
+            <Route path="agencies" element={<SuperAdminAgencies />} />
+            <Route path="analytics" element={<SuperAdminAnalytics />} />
+            <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
+            <Route path="system" element={<SuperAdminSystemHealth />} />
+            <Route path="settings" element={<SuperAdminSettings />} />
+          </Route>
 
           {/* Default Route */}
           <Route path="/" element={<Navigate to="/login" />} />

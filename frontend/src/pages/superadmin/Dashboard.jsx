@@ -1,210 +1,213 @@
 import React, { useState, useEffect } from 'react';
-import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
-import { ShieldAlert, LogOut, CheckCircle, XCircle, Activity, Box, Users, Plus, Loader2 } from 'lucide-react';
+import { Building2, Users, Newspaper, Activity, TrendingUp, TrendingDown, BarChart3, Trophy } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 export default function SuperAdminDashboard() {
-    const { user, logout } = useAuth();
-    const [agencies, setAgencies] = useState([]);
+    const [analytics, setAnalytics] = useState(null);
+    const [growth, setGrowth] = useState([]);
+    const [topAgencies, setTopAgencies] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
-    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-    const [createForm, setCreateForm] = useState({ agency_name: '', admin_username: '', admin_password: '' });
-    const [isCreating, setIsCreating] = useState(false);
-    const [createError, setCreateError] = useState('');
-
-    const fetchAgencies = async () => {
-        try {
-            const res = await api.get('/superadmin/agencies');
-            setAgencies(res.data);
-        } catch (err) {
-            console.error(err);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-
     useEffect(() => {
-        fetchAgencies();
+        const load = async () => {
+            try {
+                const [analyticsRes, growthRes, topRes] = await Promise.all([
+                    api.get('/superadmin/analytics'),
+                    api.get('/superadmin/analytics/growth'),
+                    api.get('/superadmin/analytics/top-agencies'),
+                ]);
+                setAnalytics(analyticsRes.data);
+                setGrowth(growthRes.data);
+                setTopAgencies(topRes.data);
+            } catch (err) {
+                console.error(err);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        load();
     }, []);
 
-    const handleCreateAgency = async (e) => {
-        e.preventDefault();
-        setIsCreating(true);
-        setCreateError('');
-        try {
-            await api.post('/auth/register', createForm);
-            setIsCreateModalOpen(false);
-            setCreateForm({ agency_name: '', admin_username: '', admin_password: '' });
-            fetchAgencies();
-        } catch (err) {
-            setCreateError(err.response?.data?.detail || "Failed to provision target node.");
-        } finally {
-            setIsCreating(false);
-        }
-    };
+    if (isLoading) {
+        return (
+            <div className="flex-1 flex items-center justify-center min-h-screen">
+                <div className="text-indigo-400 font-mono text-sm tracking-widest animate-pulse">Loading telemetry...</div>
+            </div>
+        );
+    }
 
-    const toggleStatus = async (agencyId, currentStatus) => {
-        const newStatus = currentStatus === 'active' ? 'suspended' : 'active';
-        try {
-            await api.put(`/superadmin/agencies/${agencyId}/status`, { status: newStatus });
-            // Direct local update for snappy UI
-            setAgencies(agencies.map(a => a.id === agencyId ? { ...a, status: newStatus } : a));
-        } catch (err) {
-            alert("Failed to update status");
-        }
-    };
+    const kpis = [
+        { label: "Total Agencies", value: analytics?.total_agencies ?? 0, icon: Building2, color: "indigo", trend: "+2.5%" },
+        { label: "Total Customers", value: analytics?.total_customers ?? 0, icon: Users, color: "cyan", trend: "+0.9%" },
+        { label: "Total Newspapers", value: analytics?.total_newspapers ?? 0, icon: Newspaper, color: "emerald", trend: "+1.1%" },
+        { label: "Total Workers", value: analytics?.total_workers ?? 0, icon: Activity, color: "amber", trend: null },
+    ];
 
-    const activeCount = agencies.filter(a => a.status === 'active').length;
+    const pieData = [
+        { name: 'Active', value: analytics?.active_agencies ?? 0 },
+        { name: 'Suspended', value: analytics?.suspended_agencies ?? 0 },
+    ];
+    const PIE_COLORS = ['#34d399', '#f87171'];
+
+    const barColors = ['#818cf8', '#34d399'];
+    const maxCustomers = Math.max(...topAgencies.map(a => a.customer_count), 1);
 
     return (
-        <div className="min-h-screen bg-slate-950 font-sans text-slate-300 relative overflow-hidden flex flex-col items-center py-10 px-4">
-            {/* Background Orbs */}
-            <div className="absolute top-[-20%] left-[-10%] w-[800px] h-[800px] bg-indigo-600/20 rounded-full mix-blend-screen filter blur-[100px] -z-10"></div>
-            <div className="absolute bottom-[-20%] right-[-10%] w-[600px] h-[600px] bg-red-600/20 rounded-full mix-blend-screen filter blur-[100px] -z-10"></div>
+        <div className="p-8 text-slate-300 space-y-8">
+            {/* Breadcrumb */}
+            <div className="text-xs font-mono text-slate-600 tracking-widest uppercase">
+                Home &bull; Dashboard &bull; Analytics
+            </div>
 
-            <div className="w-full max-w-6xl z-10">
-                {/* Header */}
-                <header className="flex justify-between items-center mb-16 backdrop-blur-md bg-white/5 border border-white/10 rounded-3xl p-6 shadow-2xl">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 bg-indigo-500/20 rounded-2xl ring-1 ring-indigo-500/50">
-                            <ShieldAlert className="w-8 h-8 text-indigo-400" />
+            {/* KPI Cards */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+                {kpis.map((kpi) => (
+                    <KPICard key={kpi.label} {...kpi} />
+                ))}
+            </div>
+
+            {/* Row 2: Growth Chart + Side panels */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+                {/* Agency Growth Bar Chart */}
+                <div className="lg:col-span-2 backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6">
+                    <div className="flex items-center justify-between mb-6">
+                        <div className="flex items-center gap-2">
+                            <BarChart3 className="w-5 h-5 text-indigo-400" />
+                            <h3 className="text-white font-bold text-lg">Agency Growth</h3>
                         </div>
-                        <div>
-                            <h1 className="text-3xl font-black text-white tracking-widest uppercase">God Mode</h1>
-                            <p className="text-indigo-300 text-sm font-mono tracking-widest uppercase mt-1">Platform Telemetry Systems</p>
+                        <div className="flex gap-4 text-xs">
+                            <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-sm"></span> New Agencies</span>
                         </div>
                     </div>
-                    <button
-                        onClick={logout}
-                        className="flex items-center gap-2 px-5 py-2.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-full transition-colors text-sm font-semibold tracking-wider uppercase"
-                    >
-                        <LogOut className="w-4 h-4" /> Terminate Session
-                    </button>
-                </header>
-
-                {/* Neon Metrics Grid */}
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-12">
-                    <MetricCard icon={<Box />} label="Total Nodes" value={agencies.length} color="indigo" />
-                    <MetricCard icon={<Activity />} label="Active Tenants" value={activeCount} color="emerald" />
-                    <MetricCard icon={<Users />} label="Suspended" value={agencies.length - activeCount} color="red" />
+                    <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={growth} barCategoryGap="20%">
+                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                            <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                            <Tooltip
+                                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', color: '#e2e8f0' }}
+                                cursor={{ fill: 'rgba(99,102,241,0.1)' }}
+                            />
+                            <Bar dataKey="count" name="Agencies" fill="#818cf8" radius={[6, 6, 0, 0]} />
+                        </BarChart>
+                    </ResponsiveContainer>
                 </div>
 
-                {/* Agency Datatable */}
-                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/50 rounded-3xl overflow-hidden shadow-2xl relative z-10">
-                    <div className="p-6 border-b border-slate-700/50 bg-slate-800/40 flex justify-between items-center">
-                        <h2 className="text-xl font-bold text-white tracking-tight">Registered Tenants</h2>
-                        <button
-                            onClick={() => setIsCreateModalOpen(true)}
-                            className="flex items-center gap-2 px-4 py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/20 rounded-xl transition-colors text-xs font-bold tracking-wider uppercase"
-                        >
-                            <Plus className="w-4 h-4" /> Initialize Node
-                        </button>
+                {/* Right column: System Activity + Top Performing */}
+                <div className="flex flex-col gap-5">
+                    {/* System Activity Donut */}
+                    <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 flex-1">
+                        <h3 className="text-white font-bold text-sm mb-4 flex items-center gap-2">
+                            <Activity className="w-4 h-4 text-cyan-400" /> System Activity
+                        </h3>
+                        <div className="flex items-center justify-center">
+                            <div className="relative">
+                                <ResponsiveContainer width={160} height={160}>
+                                    <PieChart>
+                                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value" strokeWidth={0}>
+                                            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+                                        </Pie>
+                                    </PieChart>
+                                </ResponsiveContainer>
+                                <div className="absolute inset-0 flex flex-col items-center justify-center">
+                                    <span className="text-2xl font-black text-white">
+                                        {analytics?.total_agencies ? Math.round((analytics.active_agencies / analytics.total_agencies) * 100) : 0}%
+                                    </span>
+                                    <span className="text-[10px] text-slate-500 uppercase tracking-widest">Active</span>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="flex justify-center gap-6 mt-3 text-xs">
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-emerald-400 rounded-full"></span> Active ({analytics?.active_agencies})</span>
+                            <span className="flex items-center gap-1.5"><span className="w-2 h-2 bg-red-400 rounded-full"></span> Suspended ({analytics?.suspended_agencies})</span>
+                        </div>
                     </div>
 
-                    <table className="w-full text-left border-collapse">
-                        <thead>
-                            <tr className="bg-slate-900/50 text-xs tracking-widest text-slate-400 uppercase font-bold">
-                                <th className="px-6 py-4">Agency ID</th>
-                                <th className="px-6 py-4">Name Configuration</th>
-                                <th className="px-6 py-4">Network Status</th>
-                                <th className="px-6 py-4 text-right">Overrides</th>
-                            </tr>
-                        </thead>
-                        <tbody className="divide-y divide-slate-800/50">
-                            {isLoading ? (
-                                <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-500 font-mono">Loading telemetry data...</td></tr>
-                            ) : agencies.length === 0 ? (
-                                <tr><td colSpan="4" className="px-6 py-12 text-center text-slate-500 font-mono">No tenants registered on shard.</td></tr>
-                            ) : (
-                                agencies.map(agency => (
-                                    <tr key={agency.id} className="hover:bg-slate-800/30 transition-colors">
-                                        <td className="px-6 py-5 font-mono text-xs text-indigo-300">{agency.id}</td>
-                                        <td className="px-6 py-5 font-bold text-white">{agency.name}</td>
-                                        <td className="px-6 py-5">
-                                            <span className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider border ${agency.status === 'active'
-                                                ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
-                                                : 'bg-red-500/10 text-red-400 border-red-500/20'
-                                                }`}>
-                                                {agency.status === 'active' ? <CheckCircle className="w-3.5 h-3.5" /> : <XCircle className="w-3.5 h-3.5" />}
-                                                {agency.status}
-                                            </span>
-                                        </td>
-                                        <td className="px-6 py-5 text-right space-x-3">
-                                            <button
-                                                onClick={() => toggleStatus(agency.id, agency.status)}
-                                                className={`px-4 py-1.5 rounded-full text-xs font-bold uppercase tracking-wider border transition-colors ${agency.status === 'active'
-                                                    ? 'bg-transparent border-red-500/50 text-red-400 hover:bg-red-500/10'
-                                                    : 'bg-transparent border-emerald-500/50 text-emerald-400 hover:bg-emerald-500/10'
-                                                    }`}
-                                            >
-                                                {agency.status === 'active' ? 'Suspend' : 'Reactivate'}
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
+                    {/* Invoice Summary */}
+                    <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 flex-1">
+                        <h3 className="text-white font-bold text-sm mb-4">Invoice Overview</h3>
+                        <div className="space-y-3">
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs text-slate-500">Total Invoices</span>
+                                <span className="text-sm font-bold text-white">{analytics?.total_invoices ?? 0}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs text-slate-500">Pending</span>
+                                <span className="text-sm font-bold text-amber-400">{analytics?.pending_invoices ?? 0}</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                                <span className="text-xs text-slate-500">Paid</span>
+                                <span className="text-sm font-bold text-emerald-400">{analytics?.paid_invoices ?? 0}</span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Node Provisioning Modal */}
-            {isCreateModalOpen && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm">
-                    <div className="bg-slate-900 border border-slate-700/50 rounded-3xl p-8 w-full max-w-md shadow-2xl relative overflow-hidden group">
-                        <div className="absolute -inset-1 bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-3xl blur opacity-0 group-hover:opacity-100 transition duration-1000 -z-10"></div>
-                        <h2 className="text-2xl font-black text-white mb-2 tracking-widest uppercase">Target Node Definition</h2>
-                        <p className="text-indigo-300 text-xs font-mono tracking-widest uppercase mb-8">Provision a new Tenant Shell</p>
-
-                        {createError && (
-                            <div className="mb-6 p-4 bg-red-500/10 border border-red-500/20 rounded-xl">
-                                <p className="text-red-400 text-xs font-bold tracking-wide text-center uppercase">{createError}</p>
-                            </div>
-                        )}
-
-                        <form onSubmit={handleCreateAgency} className="space-y-5">
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 tracking-widest uppercase mb-2">Agency/Tenant Name</label>
-                                <input required value={createForm.agency_name} onChange={e => setCreateForm({ ...createForm, agency_name: e.target.value })} className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="Global Distributors" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 tracking-widest uppercase mb-2">Admin Identity</label>
-                                <input required value={createForm.admin_username} onChange={e => setCreateForm({ ...createForm, admin_username: e.target.value })} className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors text-sm" placeholder="sysadmin_01" />
-                            </div>
-                            <div>
-                                <label className="block text-xs font-bold text-slate-400 tracking-widest uppercase mb-2">Access Key (Password)</label>
-                                <input required type="password" value={createForm.admin_password} onChange={e => setCreateForm({ ...createForm, admin_password: e.target.value })} className="w-full bg-black/40 border border-slate-700 rounded-xl px-4 py-3 text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 transition-colors text-sm tracking-widest" placeholder="••••••••" />
-                            </div>
-                            <div className="flex gap-4 pt-4">
-                                <button type="button" onClick={() => setIsCreateModalOpen(false)} className="flex-1 px-4 py-3 rounded-xl border border-slate-700/50 text-slate-400 hover:bg-slate-800/50 transition-colors text-xs font-bold tracking-widest uppercase">Abort</button>
-                                <button type="submit" disabled={isCreating} className="flex-1 px-4 py-3 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition-colors text-xs font-bold tracking-widest uppercase flex justify-center items-center disabled:opacity-50">
-                                    {isCreating ? <Loader2 className="w-4 h-4 animate-spin" /> : "Provision"}
-                                </button>
-                            </div>
-                        </form>
-                    </div>
+            {/* Row 3: Top Performing Agencies */}
+            <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6">
+                <div className="flex items-center gap-2 mb-6">
+                    <Trophy className="w-5 h-5 text-amber-400" />
+                    <h3 className="text-white font-bold text-lg">Top Performing Agencies</h3>
                 </div>
-            )}
+                {topAgencies.length === 0 ? (
+                    <p className="text-slate-600 text-sm font-mono text-center py-8">No agency data available.</p>
+                ) : (
+                    <div className="space-y-4">
+                        {topAgencies.map((agency, idx) => {
+                            const pct = maxCustomers > 0 ? (agency.customer_count / maxCustomers) * 100 : 0;
+                            const colors = ['bg-indigo-500', 'bg-cyan-500', 'bg-emerald-500', 'bg-amber-500', 'bg-rose-500',
+                                'bg-violet-500', 'bg-teal-500', 'bg-orange-500', 'bg-pink-500', 'bg-blue-500'];
+                            return (
+                                <div key={agency.id} className="flex items-center gap-4">
+                                    <span className="text-xs font-mono text-slate-600 w-5 text-right">#{idx + 1}</span>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-center mb-1.5">
+                                            <span className="text-sm font-semibold text-white truncate">{agency.name}</span>
+                                            <span className="text-xs text-slate-500 ml-2 shrink-0">
+                                                {agency.customer_count} customers &middot; {agency.worker_count} workers &middot; {agency.newspaper_count} papers
+                                            </span>
+                                        </div>
+                                        <div className="w-full bg-slate-800 rounded-full h-2">
+                                            <div className={`h-2 rounded-full ${colors[idx % colors.length]} transition-all duration-500`} style={{ width: `${Math.max(pct, 2)}%` }}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                )}
+            </div>
         </div>
     );
 }
 
-function MetricCard({ icon, label, value, color }) {
+function KPICard({ label, value, icon: Icon, color, trend }) {
     const colorMap = {
-        indigo: 'from-indigo-500/20 to-indigo-900/10 border-indigo-500/30 text-indigo-400',
-        emerald: 'from-emerald-500/20 to-emerald-900/10 border-emerald-500/30 text-emerald-400',
-        red: 'from-red-500/20 to-red-900/10 border-red-500/30 text-red-400',
+        indigo: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', text: 'text-indigo-400', ring: 'ring-indigo-500/30' },
+        cyan: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400', ring: 'ring-cyan-500/30' },
+        emerald: { bg: 'bg-emerald-500/10', border: 'border-emerald-500/20', text: 'text-emerald-400', ring: 'ring-emerald-500/30' },
+        amber: { bg: 'bg-amber-500/10', border: 'border-amber-500/20', text: 'text-amber-400', ring: 'ring-amber-500/30' },
     };
+    const c = colorMap[color] || colorMap.indigo;
 
     return (
-        <div className={`bg-gradient-to-br ${colorMap[color]} border rounded-3xl p-6 backdrop-blur-xl relative overflow-hidden group`}>
-            <div className={`absolute -right-4 -top-4 w-24 h-24 bg-${color}-500/10 rounded-full blur-2xl group-hover:bg-${color}-500/20 transition-colors`}></div>
-            <div className={`mb-4 w-10 h-10 flex items-center justify-center rounded-xl bg-slate-900/50 border border-${color}-500/20 text-${color}-400`}>
-                {React.cloneElement(icon, { className: 'w-5 h-5' })}
+        <div className={`backdrop-blur-xl bg-slate-900/60 border ${c.border} rounded-2xl p-5 flex items-center gap-4`}>
+            <div className={`p-3 ${c.bg} rounded-xl ring-1 ${c.ring}`}>
+                <Icon className={`w-6 h-6 ${c.text}`} />
             </div>
-            <div className="text-4xl font-black text-white mb-1.5 tracking-tight">{value}</div>
-            <div className="text-xs uppercase tracking-widest font-bold opacity-70">{label}</div>
+            <div className="flex-1">
+                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
+                <div className="flex items-baseline gap-2">
+                    <span className="text-2xl font-black text-white">{value.toLocaleString()}</span>
+                    {trend && (
+                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-0.5">
+                            <TrendingUp className="w-3 h-3" /> {trend}
+                        </span>
+                    )}
+                </div>
+            </div>
         </div>
     );
 }
