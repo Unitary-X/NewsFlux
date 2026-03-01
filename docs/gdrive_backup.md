@@ -2,7 +2,14 @@
 
 ## Overview
 
-Each agency gets automated Excel file backups pushed to Google Drive, organized into 3 folders:
+Two backup modes depending on user role:
+
+| Mode | Who | Auth Method | Where Backups Go |
+|------|-----|------------|-----------------|
+| **Central Backup** | Super Admin | Service Account (JSON key) | Super Admin's Google Drive |
+| **Agency Backup** | Agency Admin | Google OAuth (Sign in with Google) | Admin's own Google Drive |
+
+Each agency gets Excel file backups organized into 3 folders:
 
 ```
 NewsFlux Backups/
@@ -57,9 +64,11 @@ NewsFlux Backups/
 backend/
 ├── app/
 │   └── services/
-│       ├── gdrive_service.py      # Google Drive API wrapper
+│       ├── gdrive_service.py      # Google Drive API wrapper (both OAuth + Service Account)
 │       ├── excel_export.py        # openpyxl Excel generation
 │       └── backup_scheduler.py    # Celery Beat tasks
+│   └── api/v1/
+│       └── admin.py               # OAuth callback + backup endpoints
 ```
 
 ### How It Works
@@ -72,28 +81,71 @@ backend/
 2. **Excel Export Service** (`openpyxl`) queries the DB per agency and generates `.xlsx` files with formatted sheets, headers, and auto-column-widths
 
 3. **Google Drive Service** (`google-api-python-client`):
-   - Authenticates via Service Account
+   - **Super Admin path:** Authenticates via Service Account JSON key → uploads to central Drive
+   - **Agency Admin path:** Authenticates via stored OAuth refresh token → uploads to admin's own Drive
    - Creates folder structure if not exists: `NewsFlux Backups/{Agency Name}/{Daily|Monthly|Yearly}`
    - Uploads Excel files to the correct folder
-   - Optionally shares the agency folder with the admin's email
 
 4. **API Endpoints** for manual control:
+   - `GET /admin/backup/google/connect` — Redirects admin to Google OAuth consent screen
+   - `GET /admin/backup/google/callback` — Handles OAuth callback, stores refresh token
+   - `GET /admin/backup/google/status` — Check if Google Drive is connected
+   - `DELETE /admin/backup/google/disconnect` — Remove stored Google credentials
    - `POST /admin/backup/trigger` — Manual daily backup trigger
    - `GET /admin/backup/history` — List past backups with Drive links
-   - `POST /superadmin/backup/trigger-all` — Trigger backup for all agencies
+   - `POST /superadmin/backup/trigger-all` — Trigger backup for all agencies (uses service account)
 
 ### Dependencies (added to requirements.txt)
 ```
 openpyxl>=3.1.0
 google-api-python-client>=2.100.0
 google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
 ```
 
 ---
 
-## Google API Setup (Required)
+## Agency Admin Flow (OAuth — Easy Way)
 
-### Step-by-Step Instructions
+### How the Admin Experiences It
+
+1. Admin goes to **Settings** or **Backup** page in the dashboard
+2. Clicks **"Connect Google Drive"** button
+3. Google login popup appears → admin signs in with their Google account
+4. Clicks **"Allow"** to grant Drive file access
+5. Done! Backups now automatically go to their personal Google Drive
+6. Admin can click **"Backup Now"** anytime for a manual export
+7. Admin can **"Disconnect"** at any time to revoke access
+
+### What Happens Behind the Scenes
+
+```
+Admin clicks "Connect"
+    → Frontend opens: /api/v1/admin/backup/google/connect
+    → Backend redirects to Google OAuth consent URL
+    → Admin logs into Google, clicks Allow
+    → Google redirects back to: /api/v1/admin/backup/google/callback?code=AUTH_CODE
+    → Backend exchanges auth code for access_token + refresh_token
+    → refresh_token is encrypted and stored in DB (Agency.gdrive_refresh_token)
+    → Admin is redirected back to dashboard with success message
+```
+
+For scheduled backups, the backend uses the stored **refresh token** to get a fresh access token — no user interaction needed. Tokens auto-renew indefinitely as long as the admin doesn't revoke access.
+
+### Database Change
+
+Add to `Agency` model:
+```python
+gdrive_refresh_token = Column(String, nullable=True)   # Encrypted OAuth refresh token
+gdrive_folder_id = Column(String, nullable=True)        # Root backup folder ID in admin's Drive
+gdrive_connected_at = Column(DateTime, nullable=True)   # When Drive was connected
+```
+
+---
+
+## Google API Setup
+
+### One-Time Setup (You do this once for the whole platform)
 
 #### 1. Create a Google Cloud Project
 - Go to [Google Cloud Console](https://console.cloud.google.com/)
@@ -101,40 +153,55 @@ google-auth>=2.23.0
 
 #### 2. Enable Google Drive API
 - In the project, go to **APIs & Services → Library**
-- Search for **"Google Drive API"**
-- Click **Enable**
+- Search for **"Google Drive API"** → Click **Enable**
 
-#### 3. Create a Service Account
+#### 3. Create OAuth Client ID (for Agency Admins)
 - Go to **APIs & Services → Credentials**
-- Click **"Create Credentials" → "Service Account"**
-- Name: `newsflux-backup-bot`
-- Role: **None needed** (Drive access is granted by sharing folders)
-- Click **Done**
+- Click **"Create Credentials" → "OAuth client ID"**
+- Application type: **Web application**
+- Name: `NewsFlux Backup`
+- Authorized redirect URIs: `https://yourdomain.com/api/v1/admin/backup/google/callback` (and `http://localhost:8000/api/v1/admin/backup/google/callback` for dev)
+- Click **Create** → Copy the **Client ID** and **Client Secret**
 
-#### 4. Generate the JSON Key
-- Click on the service account you just created
-- Go to **Keys** tab → **Add Key → Create new key**
-- Choose **JSON** → Download
-- You'll get a file like `newsflux-backups-abc123.json`
+#### 4. Configure OAuth Consent Screen
+- Go to **APIs & Services → OAuth consent screen**
+- User Type: **External**
+- App name: `NewsFlux`
+- Scopes: Add `https://www.googleapis.com/auth/drive.file` (only access files created by the app)
+- Save
 
-#### 5. Place the Key in the Project
-- Rename it to `gdrive_credentials.json`
-- Place it at `backend/gdrive_credentials.json`
-- **DO NOT commit this file to Git** (already in .gitignore)
+#### 5. (Optional) Create Service Account for Super Admin
+- Only needed if super admin wants centralized backups
+- Go to **Credentials → Create Credentials → Service Account**
+- Download JSON key → place at `backend/gdrive_credentials.json`
 
-#### 6. Share a Drive Folder with the Service Account
-- Create a folder in your Google Drive called `NewsFlux Backups`
-- Right-click → Share → paste the service account email (looks like `newsflux-backup-bot@newsflux-backups.iam.gserviceaccount.com`)
-- Give it **Editor** access
-- Copy the folder ID from the URL: `https://drive.google.com/drive/folders/{THIS_IS_THE_FOLDER_ID}`
-
-#### 7. Add Environment Variables
-Add to your `.env` file:
+#### 6. Add Environment Variables
 ```env
+# OAuth (for agency admins — required)
+GOOGLE_CLIENT_ID=your_oauth_client_id
+GOOGLE_CLIENT_SECRET=your_oauth_client_secret
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/admin/backup/google/callback
+
+# Service Account (for super admin — optional)
 GDRIVE_CREDENTIALS_PATH=gdrive_credentials.json
 GDRIVE_ROOT_FOLDER_ID=your_folder_id_here
+
+# Feature flag
 GDRIVE_ENABLED=true
 ```
+
+---
+
+## Comparison: OAuth vs Service Account
+
+| | OAuth (Agency Admin) | Service Account (Super Admin) |
+|---|---|---|
+| **Setup difficulty** | Easy — admin just clicks "Sign in with Google" | Harder — needs JSON key file + folder sharing |
+| **Where files go** | Admin's own Google Drive | Central platform Drive |
+| **Who controls data** | The agency admin | The super admin |
+| **Needs JSON key?** | No | Yes |
+| **Admin can browse files?** | Yes, in their own Drive | Only if folder is shared with them |
+| **Best for** | Self-service per agency | Platform-wide centralized backup |
 
 ---
 
@@ -151,13 +218,17 @@ For a newspaper agency SaaS, daily Excel files are tiny (< 100 KB each). Even wi
 
 ## Security Notes
 
+- OAuth refresh tokens are **encrypted** before storing in DB (using app SECRET_KEY)
 - Service account key (`gdrive_credentials.json`) must NEVER be committed to Git
-- The key should be injected via Docker secrets or environment variable in production
-- Each agency's folder can optionally be shared with the admin's email for direct access
-- All uploads are to a centrally-owned Drive, not individual user accounts
+- OAuth scope is `drive.file` — app can only access files **it created**, not the user's entire Drive
+- Admin can revoke access anytime from the app UI or from [Google Account permissions](https://myaccount.google.com/permissions)
+- All uploads are audited in the audit_logs table
 
 ---
 
 ## Status: 🔲 NOT YET IMPLEMENTED
 
-Waiting for Google Cloud service account credentials to be provided before building.
+**To start building, you need to:**
+1. Create a Google Cloud project and enable Drive API (free, 5 minutes)
+2. Create an OAuth Client ID and give me the Client ID + Client Secret
+3. I'll implement everything else — backend services, API endpoints, frontend UI
