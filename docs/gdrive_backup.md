@@ -226,9 +226,15 @@ For a newspaper agency SaaS, daily Excel files are tiny (< 100 KB each). Even wi
 
 ---
 
-## Status: 🔲 NOT YET IMPLEMENTED
+## Status: ✅ IMPLEMENTED
 
-**To start building, you need to:**
-1. Create a Google Cloud project and enable Drive API (free, 5 minutes)
-2. Create an OAuth Client ID and give me the Client ID + Client Secret
-3. I'll implement everything else — backend services, API endpoints, frontend UI
+**Implementation commit:** `a4bdf3c` (pushed to `origin/main`)
+
+### Implemented Files:
+- `backend/app/services/gdrive_service.py` — Google Drive OAuth2 + upload
+- `backend/app/services/excel_export.py` — openpyxl Excel generation
+- `backend/app/services/backup_scheduler.py` — Scheduled backup triggers
+- `backend/app/api/v1/admin.py` — 8 backup API endpoints
+- `frontend/src/pages/admin/Backup.jsx` — Backup management page
+- `frontend/src/components/admin/Sidebar.jsx` — Backup nav link added
+- `frontend/src/locales/en.json` + `ta.json` — i18n translations

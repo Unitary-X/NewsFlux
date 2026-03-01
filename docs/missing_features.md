@@ -44,7 +44,7 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 - [x] Worker — Create + List + Edit (username + password reset) + Delete (cascades to assignments)
 - [x] Customer — Create + List + Edit + Delete (cascades to subscriptions, assignments, invoices)
 - [x] Daily Stock entry (Taken / Returned per newspaper per date, auto-calculated Sold)
-- [x] Sidebar navigation with 8 links (Overview, Daily Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing)
+- [x] Sidebar navigation with 9 links (Overview, Daily Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup)
 - [x] **Dashboard overview** — 5 KPI cards + 14-day revenue area chart + stock bar chart + revenue breakdown table
 - [x] **Daily Revenue calculation** — `Sold × Price` computed in dashboard stats and stock summary
 - [x] **Charts / Visualizations** — recharts AreaChart (revenue trend) + BarChart (stock summary)
@@ -55,6 +55,7 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 - [x] **Worker Route Assignments** — Assign customers to workers with route ordering, grouped-by-worker display
 - [x] **Search / Filter in tables** — All entity tables have search/filter
 - [x] **Announcement display** — Admin receives platform announcements (all + admin-targeted)
+- [x] **Google Drive Backup** — OAuth2 connect/disconnect, manual backup triggers (daily/monthly/yearly), browse backup files, 8 API endpoints
 
 ### Missing — Analytics & Reports
 - [ ] **Profit / Loss dashboard** — Specified in docs, not built
@@ -150,4 +151,4 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 18. Stripe/Razorpay payment integration for SaaS billing
 19. Worker route-ordered delivery view
 20. Error boundaries + form validation polish
-21. **Daily Google Drive Backup** — Per-agency Excel export to Google Drive with 3 folders: Daily Updates, Monthly Analysis, Yearly Analysis (see [gdrive_backup.md](gdrive_backup.md))
+21. ~~**Daily Google Drive Backup** — Per-agency Excel export to Google Drive with 3 folders: Daily Updates, Monthly Analysis, Yearly Analysis~~ ✅ (see [gdrive_backup.md](gdrive_backup.md))

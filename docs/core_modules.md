@@ -1,98 +1,117 @@
-# 🧩 NewsFlux: Core Modules & Feature Flow
+# 🧩 NewsFlux: Core Modules & Page Flow
 
-This document details the essential business modules and the exact page configurations required for the three distinct roles within the NewsFlux platform.
-
----
-
-## 🧠 Core Modules
-
-### 📰 1. Newspaper Management
-- Centralized list of newspapers.
-- **Multi-Language Support (i18n):** Native integration using `react-i18next` for seamless dynamic label translation across the platform without altering database schema.
-- Admin-controlled base pricing algorithms.
-
-### 📦 2. Stock Management
-- Support for daily stock entry.
-- Real-time tracking of remaining stock counts.
-- Validation layers to prevent over-distribution.
-
-### 👷 3. Worker Management
-- Add, update, and remove worker profiles.
-- Route assignment (assign specific newspapers to workers).
-- Aggregated tracking of individual Worker metrics: `Taken`, `Returned`, and `Sold`.
-
-### 👥 4. Customer Management
-- **Customer Types:** Daily, Weekly, Monthly, Yearly.
-- Subscription tracking and pause state management.
-
-### 💰 5. Pricing System
-- Pricing grids defined entirely by the Agency Admin.
-- Pricing can vary significantly per agency.
-- Automatic integration with the Sales and Billing calculators.
-
-### 🧾 6. Billing System
-- Automated monthly bill generation.
-- Delivery charge inclusions (optional per agency).
-- State tracking: Paid vs. Unpaid invoices.
-
-### 💸 7. Salary System
-- Worker compensation calculations based on delivery count volume and flat commission rates.
-
-### 📊 8. Analytics & Reports
-- **Granular Dashboards:** Daily, Weekly, Monthly scopes.
-- Worker performance tracking.
-- Aggregate agency profit analysis and stock reconciliation reports.
+This document details the implemented business modules and page configurations for all three roles within the NewsFlux platform.
 
 ---
 
-## 🚀 Advanced Super Admin Add-ons (Phase 2 Roadmap)
-These enterprise features are designated for post-MVP implementation to empower the Platform Owner with deep observability and reduced onboarding friction.
+## 🧠 Core Modules (All Implemented ✅)
 
-### 🏢 1. Master Agency Templates
-- **Purpose:** Fast Agency Provisioning.
-- **Functionality:** When provisioning a new agency, the Super Admin can pre-seed their database with the top 20 most popular newspapers and average market prices.
-- **Benefit:** Saves new client Admins hours of initial data entry and drastically improves Time-to-Value (TTV).
+### 📰 1. Newspaper Management ✅
+- Admin CRUD for newspapers (name, base price) — `POST/GET/PUT/DELETE /admin/newspapers`
+- Multi-language labels via `react-i18next` (English + Tamil)
+- Per-agency newspaper lists isolated by `tenant_id`
 
-### 🔒 2. Secure Impersonation (God Mode)
-- **Purpose:** Rapid Customer Support & Debugging.
-- **Functionality:** A crucial support tool allowing the Super Admin to temporarily log in as an Agency Admin to see exactly what they see on their screen.
-- **Security:** All actions taken during impersonation are securely logged in the `audit_logs` specifically tagging the Super Admin.
+### 📦 2. Stock Management ✅
+- Daily stock entry per newspaper: taken, returned, sold (computed) — `POST /admin/stock`, `GET /admin/stock/{date}`
+- Dashboard stock summary chart — `GET /admin/dashboard/stock-summary`
+- StockTable page with date-based ledger view
 
-### 📈 3. Platform Velocity Analytics
-- **Purpose:** Advanced SaaS Metrics.
-- **Functionality:** Beyond just counting agencies, track Month-over-Month (MoM) growth, overall churn rates, and total aggregate end-customers across the entire platform to measure true product-market fit.
+### 👷 3. Worker Management ✅
+- CRUD for worker profiles — `POST/GET/PUT/DELETE /admin/workers`
+- Route assignment linking workers → customers with ordering — `POST/GET/DELETE /admin/assignments`
+- Worker PWA fetches assigned customers — `GET /worker/assignments`
 
-### 📡 4. Live Telemetry & APM
-- **Purpose:** Global Health Observability.
-- **Functionality:** Integrate real-time health monitoring (tracking Database locks, API 500 errors, and response latency).
-- **Benefit:** Allows the Super Admin to proactively fix server issues before agency users notice any performance degradation.
+### 👥 4. Customer Management ✅
+- CRUD for customer records — `POST/GET/PUT/DELETE /admin/customers`
+- Subscription management linking customers to newspapers with quantity, price override, and pause/active status — `POST/GET/PUT/DELETE /admin/subscriptions`
+
+### 💰 5. Pricing System ✅
+- Per-agency pricing: each newspaper has a `base_price` set by the admin
+- Subscription-level price overrides via `customer_subscriptions.price` field
+- Prices feed directly into billing calculations
+
+### 🧾 6. Billing System ✅
+- Monthly bill generation — `POST /admin/billing/generate`
+- Formula: `TotalBill = Σ (Price × Quantity × ActiveDays) + DeliveryFee`
+- Invoice tracking: pending/paid — `GET /admin/invoices`, `PUT /admin/invoices/{id}/pay`
+
+### � 7. Analytics & Dashboards ✅
+- **Admin Dashboard:** Stats cards + revenue chart + stock summary — 3 dedicated endpoints
+- **Super Admin Analytics:** Platform-wide metrics, trends, growth, top agencies, churn — 5 dedicated endpoints
+- **System Health:** Real-time server monitoring — `GET /superadmin/system-health`
+
+### 🔔 8. Announcements ✅
+- Platform-wide messaging from Super Admin to agencies/workers
+- Targetable by audience: all, admins, workers, or specific agency
+- Visible to admins (`GET /admin/announcements`) and workers (`GET /worker/announcements`)
+
+### 💾 9. Google Drive Backup ✅
+- OAuth2 consent flow per agency for secure Drive access
+- Excel export (openpyxl) of agency data uploaded to admin's personal Google Drive
+- Daily, monthly, and yearly backup triggers
+- Browse and manage backup files from frontend
+
+### 🔍 10. Audit & Security ✅
+- Audit log tracking for all critical actions — `GET /superadmin/audit-logs`
+- Tenant impersonation with full audit trail — `POST /superadmin/impersonate/{agency_id}`
+- Billing plans for SaaS tiering — assigned per agency
 
 ---
 
-## 🚀 Page / Feature Flow Layout
+## 🚀 Super Admin Add-ons (All Implemented ✅)
 
-**Authentication & Onboarding:**
-1. Login Page
-2. Terms & Conditions
-3. Welcome / Platform Guide
-4. Role-Specific Dashboard
+| Feature | Status | Description |
+|---------|--------|-------------|
+| Agency Templates | ✅ | Pre-seed agencies with regional newspaper lists |
+| Secure Impersonation | ✅ | View platform as any agency admin, fully audit-logged |
+| Platform Analytics | ✅ | MoM growth, churn rates, top agencies, aggregate metrics |
+| System Health / APM | ✅ | Real-time server health monitoring |
+| Billing Plans | ✅ | SaaS tiers with worker/customer limits |
+| Announcements | ✅ | Targetable platform-wide messaging |
+
+
+## 🚀 Page / Feature Flow
+
+### 🔐 Authentication
+1. **Login Page** (`/login`) — Single entry point for all roles
+2. Role-based redirect to appropriate dashboard after JWT authentication
 
 ---
 
-### 🏢 Admin Pages (Agency Scope)
-- Newspapers
-- Stock Entry
-- Workers
-- Customers
-- Billing
-- Reports
+### 🏢 Admin Pages — 9 Pages (Agency Scope)
 
-### 👷 Worker Pages (Personal Scope)
-- Today’s Assignment (Route View)
-- Stock Entry Form (Taken / Returned Inputs)
-- My Sales Dashboard
+| Page | Route | Purpose |
+|------|-------|---------|
+| Dashboard | `/admin/dashboard` | Stats cards, revenue chart, stock summary |
+| Stock Entry | `/admin/stock` | Daily newspaper stock ledger |
+| Newspapers | `/admin/newspapers` | CRUD newspaper catalog |
+| Workers | `/admin/workers` | CRUD worker profiles |
+| Customers | `/admin/customers` | CRUD customer records |
+| Subscriptions | `/admin/subscriptions` | Manage paper-to-customer assignments |
+| Assignments | `/admin/assignments` | Worker-to-customer route mapping |
+| Billing | `/admin/billing` | Invoice generation & payment tracking |
+| Backup | `/admin/backup` | Google Drive connection & backup management |
 
-### 👑 Super Admin Pages (Platform Scope)
-- Agency Management (Create/Suspend Entities)
-- Global Analytics (Count, Load, Revenue)
-- Server Monitoring Logs
+---
+
+### 👷 Worker Pages — 1 Page (Personal Scope)
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| Dashboard | `/worker/dashboard` | Today's assignments, offline sync, announcements |
+
+Worker features: StepperInput for touch-friendly data entry, IndexedDB offline caching via Dexie.js, automatic sync via `useSyncQueue` hook.
+
+---
+
+### 👑 Super Admin Pages — 7 Pages (Platform Scope)
+
+| Page | Route | Purpose |
+|------|-------|---------|
+| Dashboard | `/superadmin/dashboard` | Platform overview metrics |
+| Agencies | `/superadmin/agencies` | Create, manage, suspend agencies |
+| Analytics | `/superadmin/analytics` | Growth trends, churn, top performers |
+| Announcements | `/superadmin/announcements` | Platform messaging management |
+| Audit Logs | `/superadmin/audit-logs` | Security & change history |
+| System Health | `/superadmin/system-health` | Server monitoring dashboard |
+| Settings | `/superadmin/settings` | Platform configuration |

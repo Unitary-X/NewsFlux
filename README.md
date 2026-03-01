@@ -1,153 +1,163 @@
 # 📰 NewsFlux
 
-[![NewsFlux Banner](https://via.placeholder.com/1200x300.png?text=NewsFlux+-+Multi-Tenant+SaaS+Platform)](#)
-
-**NewsFlux** is a production-ready, highly scalable Multi-Tenant B2B SaaS system engineered perfectly for the newspaper distribution industry.
-
-It provides completely isolated environments for newspaper distribution agencies, strict role-based access control, complex daily billing logic, and true offline-first capabilities for distribution workers.
+**NewsFlux** is a fully implemented Multi-Tenant B2B SaaS platform for the newspaper distribution industry. It provides isolated environments for distribution agencies, strict role-based access control, automated daily billing logic, offline-first worker capabilities, and a platform-level super admin console.
 
 ---
 
-## 🚀 Why NewsFlux? (The Business Value)
+## 🚀 What It Does
 
-Newspaper distribution is historically bound to pen, paper, and manual ledger calculations, leading to wasted stock, skipped deliveries, and massive bad debt at the end of the month. 
+Newspaper distribution runs on pen-and-paper math — leading to wasted stock, missed deliveries, and bad debt. NewsFlux automates the entire workflow:
 
-**NewsFlux solves this by:**
-1. **Automating the math:** Instantly calculating `Sold = Taken - Returned` every day.
-2. **Preventing Bad Debt:** Customers can pause their own subscriptions or utilize pre-paid ledger wallets, ensuring the algorithm only bills for delivered days.
-3. **True Offline Capabilities:** Workers often deliver in underground complexes or rural areas without 5G. The Progressive Web App (PWA) operates entirely offline and synchronizes via a Batch API once connected.
-
----
-
-## 🏢 Platform Ecosystem (Unified SPA)
-
-NewsFlux runs on a strict **Shared-Schema Multi-Tenant** architecture. Instead of separate login pages or distinct apps, users access a **single centralized login portal**. Upon authentication, the React Router automatically redirects the user to their respective interface based on their role:
-
-- **👑 Super Admin Workspace:** An immersive dark-mode glassmorphism UI for the Platform Owner. Features global APM telemetry, SaaS Stripe billing integration, SaaS churn analytics, and secure tenant impersonation (God Mode) for rapid bug fixing. *(See [Super Admin UI Spec](docs/super%20admin%20frontend%20.md))*
-- **🏢 Admin Dashboard:** A high-contrast, dense desktop ledger interface optimized for data entry, worker management, and pricing controls—supporting dual-language tags (e.g., English stacked with Tamil).
-- **👷 Worker PWA:** Mobile-first, fully offline-capable React app with synchronization queues. Designed with huge 48px+ touch targets and stepper inputs (`[-] [10] [+]`) for robust on-the-go data entry while riding a bike or walking.
+1. **Daily Sales:** `Sold = Taken - Returned` — calculated server-side to prevent manipulation.
+2. **Daily Revenue:** `Income = Sold × Price` — computed in real-time dashboards.
+3. **Monthly Billing:** `TotalBill = Σ (Price × Quantity × ActiveDays) + DeliveryFee` — automated invoice generation via Celery background jobs.
+4. **Offline Delivery:** Workers in areas without connectivity use the PWA offline and batch-sync when reconnected.
 
 ---
 
-## 🎯 Core Business Logic & Formulas
+## 🏢 Platform Ecosystem
 
-The platform automates the intense daily and monthly mathematical operations securely on the backend:
+A single React SPA with role-based routing after login:
 
-1. **Daily Sales Calculation:**
-   > `Sold = Taken - Returned`
-   Calculated dynamically via PostgreSQL generated columns and backend trigger operations to prevent client-side manipulation.
-
-2. **Daily Revenue Calculation:**
-   > `Income = Sold × Price`
-
-3. **Monthly Billing Aggregation:**
-   > `TotalBill = Σ (Price_d × Status_d) + DeliveryFee`
-   Where `Status_d` = 1 if delivered, 0 if the customer paused delivery for that specific day. 
+| Role | Interface | Key Features |
+|------|-----------|-------------|
+| **👑 Super Admin** | Dark-mode glassmorphism dashboard | Agency CRUD, Analytics (KPIs, growth, churn), Audit Logs, System Health/APM, God Mode (impersonation), Templates, Announcements, Billing Plans |
+| **🏢 Admin** | Dense data-entry ledger UI | Newspapers, Workers, Customers, Stock Entry, Subscriptions, Assignments, Billing/Invoices, Google Drive Backup, Dashboard with charts |
+| **👷 Worker** | Mobile-first offline PWA | View assignments, enter Taken/Returned with stepper inputs, toggle delivery status, IndexedDB + background sync |
 
 ---
 
-## 🔐 Strict Role-Based Access Control (RBAC)
+## 🏗️ Tech Stack
 
-NewsFlux enforces rigorous security protocols ensuring **tenant_id** filtering bounds every operation. 
+### Backend
+- **Framework:** Python 3.11+ / FastAPI
+- **Database:** SQLite (local dev) / PostgreSQL (production) — Shared-Schema Multi-Tenancy
+- **ORM:** SQLAlchemy 2.0 with Pydantic v2 schemas
+- **Auth:** JWT (python-jose) with role claims (`sub`, `role`, `tenant_id`)
+- **Background Jobs:** Celery + Redis (billing cron, Google Drive backups)
+- **Backup:** Google Drive API with OAuth2 per-agency + openpyxl Excel exports
 
-- [View the full Roles & Permissions Documentation](docs/roles_and_permissions.md)
-
----
-
-## 🏗️ Technical Architecture (MANDATORY Tech Stack)
-
-### **Backend Ecosystem**
-- **Language/Framework:** Python 3.11+ / FastAPI
-- **Database:** PostgreSQL 15+ (Using Shared-Schema Multi-Tenancy backed by RLS)
-- **Authentication:** JWT-based stateless authentication
-- **Background Workers:** Celery / APScheduler
-- **Automated Backups:** Daily CSV Google Drive exports via OAuth & full `pg_dump` securely shipped to cloud buckets.
-
-### **Frontend Ecosystem**
-- **Library:** React.js (Monorepo architecture using Nx / Turborepo)
-- **Desktop Dashboards:** Dense DataGrids, Chart.js / Recharts for analytics
-- **Worker PWA:** IndexedDB / React Query, Service Workers for background syncing
-
----
-
-## 📚 System Documentation & Blueprints
-
-All logical specifications, UI requirements, and system flows have been broken down into official documentation:
-
-1. 🏗️ **[Master System Architecture](docs/architecture.md)**
-2. 📊 **[System Architecture & Flow Diagrams](docs/diagrams.md)**
-3. 🔄 **[End-to-End System Flow](docs/system_flow.md)**
-4. 🧩 **[Core Modules & UI Page Flow](docs/core_modules.md)**
-5. 🛡️ **[Roles & Permissions (RBAC Logic)](docs/roles_and_permissions.md)**
-6. 🌌 **[Super Admin Antigravity UI Specification](docs/super%20admin%20frontend%20.md)**
-7. 🚀 **[Suggested General Add-ons (Phase 2)](docs/suggested_features.md)**
-8. � **[Super Admin Add-ons (Phase 2)](docs/superadmin_addons.md)**
-9. �🐋 **[Deployment Strategy Analysis](docs/deployment_strategy.md)**
-10. 🖥️ **[TrueNAS Hardware Assessment](docs/own_server.md)**
-
----
-
-## ⚡ Key Architectural Mechanisms
-
-1. **Strict Tenant Middleware:** Every FastAPI request intercepts the JWT, extracts the `tenant_id`, and acts as a dependency injector blocking access to un-owned records.
-2. **Offline Sync API (Batch Resolution):** Workers syncing after going through offline zones send batch updates. The API resolves conflicts utilizing client-side timestamps.
-3. **Asynchronous Billing Cron:** Runs a heavy aggregation cron monthly, generating invoices via background workers tools to prevent API locking.
-4. **Immutable Audit Logging:** Tracks every critical modification, including price updates, stock edits, and user creations.
+### Frontend
+- **Framework:** React 19 + Vite 7
+- **Styling:** Tailwind CSS 4
+- **Charts:** Recharts
+- **Routing:** React Router 7
+- **i18n:** react-i18next (English + Tamil)
+- **Offline:** Dexie.js (IndexedDB) + custom sync queue
+- **Icons:** Lucide React
 
 ---
 
 ## 📁 Repository Structure
 
-```text
-newsflux/
+```
+newspaper-boy/
+├── README.md
+├── docker-compose.yml
 ├── docs/
-│   ├── architecture.md           # Master DB Schema and API Logic
-│   ├── core_modules.md           # Business Logic Definitions
-│   ├── deployment_strategy.md    # Docker vs Alternatives Analysis
-│   ├── diagrams.md               # Mermaid Visual Configurations
-│   ├── own_server.md             # TrueNAS Bare-Metal Hardware Assessment
-│   ├── roles_and_permissions.md  # RBAC Constraints
-│   ├── suggested_features.md     # Phase 2 General Enterprise Up-sells
-│   ├── super admin frontend .md  # Floating Antigravity UI Design Rules
-│   ├── superadmin_addons.md      # Super Admin specific features
-│   └── system_flow.md            # Daily / Monthly Operations
-├── backend/                      # FastAPI Application Workspace
+│   ├── architecture.md              # DB schema & API structure
+│   ├── core_modules.md              # Business modules & page flow
+│   ├── system_flow.md               # Daily/monthly operational flow
+│   ├── roles_and_permissions.md     # RBAC definition
+│   ├── diagrams.md                  # Mermaid architecture diagrams
+│   ├── deployment_strategy.md       # Docker/PaaS/K8s options
+│   ├── own_server.md                # TrueNAS bare-metal guide
+│   ├── super admin frontend .md     # Antigravity UI spec
+│   ├── superadmin_addons.md         # Phase 2 super admin features
+│   ├── gdrive_backup.md             # Google Drive backup plan
+│   └── missing_features.md          # Gap analysis & roadmap
+├── backend/
 │   ├── app/
-│   │   ├── api/
-│   │   ├── core/                 # TenantMiddleware, Auth, JWT Config
-│   │   ├── db/                   # SQLAlchemy ORM, Alembic Migrations
-│   │   └── services/             # Formula engines, Offline Sync algorithms
-├── frontend/                     # Unified React SPA (Vite)
+│   │   ├── main.py                  # FastAPI app + lifespan
+│   │   ├── api/v1/                  # auth, admin, worker, superadmin routers
+│   │   ├── core/                    # config, security, middleware, celery
+│   │   ├── models/models.py         # 12 SQLAlchemy models
+│   │   ├── schemas/                 # Pydantic request/response schemas
+│   │   ├── services/                # excel_export, gdrive_service, backup_scheduler, billing_job
+│   │   └── db/base_class.py         # SQLAlchemy Base
+│   ├── alembic/                     # Database migrations
+│   └── requirements.txt             # 18 Python dependencies
+├── frontend/
 │   ├── src/
-│   │   ├── features/             # Feature-based routes (Auth, Admin, Worker)
-│   │   ├── components/           # Shared UI Library
-│   │   └── App.jsx               # Main Router Hub
-└── infrastructure/               # Dockerization, Nginx, deployment scripts
+│   │   ├── App.jsx                  # Route definitions (admin/worker/superadmin)
+│   │   ├── pages/admin/             # Dashboard, Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup
+│   │   ├── pages/worker/            # Dashboard (offline-first PWA)
+│   │   ├── pages/superadmin/        # Dashboard, Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings
+│   │   ├── components/              # AdminLayout, Sidebar, SuperAdminLayout, ImpersonationBanner, AnnouncementBanner
+│   │   ├── contexts/AuthContext.jsx # JWT auth + role routing
+│   │   ├── hooks/useSyncQueue.js    # Offline sync logic
+│   │   ├── locales/                 # en.json, ta.json
+│   │   └── utils/                   # api.js (axios), db.js (Dexie)
+│   └── package.json                 # 17 npm dependencies
 ```
 
 ---
 
-## 🚦 Getting Started (Local Development)
-
-*(Coming Soon upon Release Candidate 1)*
+## 🚦 Getting Started
 
 ### Prerequisites
-- Docker and Docker Compose
-- PostgreSQL 15+
-- Node.js (Latest LTS)
 - Python 3.11+
+- Node.js 18+ (LTS)
+- Redis (for Celery — optional for dev)
 
-### Installation 
+### Backend Setup
 ```bash
-# Clone the repository
-git clone https://github.com/your-username/newsflux.git
+cd backend
+python -m venv venv
+.\venv\Scripts\activate     # Windows
+# source venv/bin/activate  # macOS/Linux
+pip install -r requirements.txt
+uvicorn app.main:app --reload --port 8000
+```
 
-# CD into the directory
-cd newsflux
+### Frontend Setup
+```bash
+cd frontend
+npm install
+npm run dev
+```
 
-# Initialize the environment via Docker Compose
+The frontend dev server proxies `/api` requests to `http://localhost:8000`.
+
+### Default Super Admin
+Create one manually:
+```bash
+cd backend
+python create_admin.py
+```
+
+### Docker (Production)
+```bash
 docker-compose up -d
 ```
+
+---
+
+## 📚 Documentation
+
+| Document | Description |
+|----------|-------------|
+| [Architecture](docs/architecture.md) | Database schema, API structure, component layout |
+| [Core Modules](docs/core_modules.md) | Business logic modules & page flow |
+| [System Flow](docs/system_flow.md) | Daily & monthly operational workflow |
+| [Roles & Permissions](docs/roles_and_permissions.md) | RBAC rules for all 3 roles |
+| [Diagrams](docs/diagrams.md) | Mermaid architecture & flow diagrams |
+| [Deployment Strategy](docs/deployment_strategy.md) | Docker, PaaS, Hybrid, K8s analysis |
+| [TrueNAS Guide](docs/own_server.md) | Bare-metal self-hosting on TrueNAS |
+| [Super Admin UI Spec](docs/super%20admin%20frontend%20.md) | Antigravity glassmorphism design rules |
+| [Super Admin Add-ons](docs/superadmin_addons.md) | Phase 2 enterprise features |
+| [Google Drive Backup](docs/gdrive_backup.md) | Per-agency Excel export to Google Drive |
+| [Gap Analysis](docs/missing_features.md) | Feature audit & remaining roadmap |
+
+---
+
+## ⚡ Key Architecture
+
+1. **Tenant Middleware:** Every request decodes the JWT, extracts `tenant_id`, and injects it into `request.state` — all queries are automatically scoped.
+2. **Offline Sync:** Workers submit batched operations from IndexedDB via `POST /worker/offline-sync` when connectivity resumes.
+3. **Celery Beat:** Automated monthly billing (`billing_job`) and Google Drive backups (`backup_scheduler` — daily/monthly/yearly).
+4. **Impersonation:** Super admin generates short-lived admin JWTs to debug agencies, all actions are audit-logged.
+5. **APM Metrics:** Middleware collects per-request latency and status codes; super admin views P50/P95/P99 in System Health page.
 
 ---
 

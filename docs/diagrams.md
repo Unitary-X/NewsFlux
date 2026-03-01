@@ -1,82 +1,185 @@
 # 📊 NewsFlux: System Architecture & Flow Diagrams
 
-This document contains visual representations of the NewsFlux Multi-Tenant SaaS platform, including the database schema, role-based workflows, and daily distribution logic.
+Visual representations of the NewsFlux Multi-Tenant SaaS platform architecture, database schema, and operational workflows.
 
 ---
 
 ## 🏗️ 1. Multi-Tenant Architecture (Shared Schema)
 
-The core structure demonstrating how a single backend and database securely handle multiple isolated agencies using a strict `tenant_id` filter.
+Single backend and SQLite database securely handling multiple isolated agencies via `tenant_id` filtering in TenantMiddleware.
 
 ```mermaid
 graph TD
     subgraph NewsFlux Platform
-        API[FastAPI Backend + Tenant Middleware]
-        DB[(PostgreSQL DB)]
+        API[FastAPI Backend + TenantMiddleware]
+        DB[(SQLite Database)]
+        Celery[Celery + Redis]
     end
 
-    SA((👑 Super Admin)) -.->|God Mode / All Data| API
+    SA((👑 Super Admin)) -.->|JWT tenant_id: null| API
     
     subgraph Agency A
-        AA((🏢 Admin A)) -->|JWT + tenant_id: A| API
-        WA1((👷 Worker A1)) -->|JWT + tenant_id: A| API
+        AA((🏢 Admin A)) -->|JWT tenant_id: A| API
+        WA1((👷 Worker A1)) -->|JWT tenant_id: A| API
+        WA1 -.->|Offline Queue| IDB1[IndexedDB]
     end
     
     subgraph Agency B
-        AB((🏢 Admin B)) -->|JWT + tenant_id: B| API
-        WB1((👷 Worker B1)) -->|JWT + tenant_id: B| API
+        AB((🏢 Admin B)) -->|JWT tenant_id: B| API
+        WB1((👷 Worker B1)) -->|JWT tenant_id: B| API
     end
 
     API -->|Filters by tenant_id| DB
+    API -->|Background jobs| Celery
+    AA -.->|OAuth2| GD[Google Drive]
     
     classDef superAdmin fill:#6b21a8,stroke:#d8b4fe,stroke-width:2px,color:#fff;
     classDef admin fill:#1d4ed8,stroke:#93c5fd,stroke-width:2px,color:#fff;
     classDef worker fill:#15803d,stroke:#86efac,stroke-width:2px,color:#fff;
     classDef system fill:#334155,stroke:#cbd5e1,stroke-width:2px,color:#fff;
+    classDef storage fill:#b45309,stroke:#fbbf24,stroke-width:2px,color:#fff;
     
     class SA superAdmin;
     class AA,AB admin;
     class WA1,WB1 worker;
-    class API,DB system;
+    class API,DB,Celery system;
+    class IDB1,GD storage;
 ```
 
 ---
 
-## 🗄️ 2. Core Entity Relationship Diagram (ERD)
+## 🗄️ 2. Entity Relationship Diagram (12 Tables)
 
-A simplified view of the database tables, emphasizing how every major entity is tied to its originating agency.
+Complete ERD showing all implemented tables and their relationships.
 
 ```mermaid
 erDiagram
     AGENCIES ||--o{ USERS : "contains"
     AGENCIES ||--o{ NEWSPAPERS : "manages"
     AGENCIES ||--o{ CUSTOMERS : "serves"
+    AGENCIES ||--o{ DAILY_STOCK : "tracks"
+    AGENCIES ||--o{ WORKER_ASSIGNMENTS : "routes"
+    AGENCIES ||--o{ INVOICES : "bills"
+    AGENCIES ||--o{ AUDIT_LOGS : "logs"
+    AGENCIES ||--o{ CUSTOMER_SUBSCRIPTIONS : "subscriptions"
+    AGENCIES }o--|| BILLING_PLANS : "subscribed to"
     
-    USERS ||--o{ WORKER_ASSIGNMENTS : "performs"
+    USERS ||--o{ WORKER_ASSIGNMENTS : "assigned"
+    USERS ||--o{ AUDIT_LOGS : "performed by"
     CUSTOMERS ||--o{ CUSTOMER_SUBSCRIPTIONS : "has"
+    CUSTOMERS ||--o{ WORKER_ASSIGNMENTS : "delivered to"
+    CUSTOMERS ||--o{ INVOICES : "billed via"
     NEWSPAPERS ||--o{ CUSTOMER_SUBSCRIPTIONS : "included in"
     NEWSPAPERS ||--o{ DAILY_STOCK : "tracked as"
     
-    CUSTOMERS ||--o{ INVOICES : "billed via"
+    ANNOUNCEMENTS }o--o| AGENCIES : "targets"
     
     AGENCIES {
         UUID id PK
         string name
+        string status "active/suspended"
+        UUID billing_plan_id FK
+        text gdrive_refresh_token "encrypted"
+        string gdrive_folder_id
+        datetime gdrive_connected_at
     }
     
     USERS {
         UUID id PK
+        UUID tenant_id FK "nullable for super_admin"
+        string role "super_admin/admin/worker"
+        string username "unique"
+        string password_hash
+    }
+    
+    NEWSPAPERS {
+        UUID id PK
         UUID tenant_id FK
-        string role "super_admin, admin, worker"
+        string name
+        decimal base_price
+    }
+    
+    CUSTOMERS {
+        UUID id PK
+        UUID tenant_id FK
+        string name
+        string address
+        string phone
+    }
+    
+    CUSTOMER_SUBSCRIPTIONS {
+        UUID id PK
+        UUID tenant_id FK
+        UUID customer_id FK
+        UUID newspaper_id FK
+        int quantity
+        decimal price "override"
+        int status "1=active 0=paused"
     }
     
     DAILY_STOCK {
         UUID id PK
         UUID tenant_id FK
         date date
+        UUID newspaper_id FK
         int taken
         int returned
-        int sold "GENERATED (taken - returned)"
+        int sold "COMPUTED taken-returned"
+    }
+    
+    WORKER_ASSIGNMENTS {
+        UUID id PK
+        UUID tenant_id FK
+        UUID worker_id FK
+        UUID customer_id FK
+        int route_order
+    }
+    
+    INVOICES {
+        UUID id PK
+        UUID tenant_id FK
+        UUID customer_id FK
+        int month
+        int year
+        decimal total_amount
+        decimal delivery_fee
+        string status "pending/paid"
+    }
+    
+    AUDIT_LOGS {
+        UUID id PK
+        UUID tenant_id FK
+        UUID user_id FK
+        string action
+        string target_table
+        json changes
+        datetime timestamp
+    }
+    
+    BILLING_PLANS {
+        UUID id PK
+        string name "Basic/Pro/Enterprise"
+        int max_workers
+        int max_customers
+        decimal price_monthly
+        string billing_cycle
+    }
+    
+    AGENCY_TEMPLATES {
+        UUID id PK
+        string name
+        string region
+        json newspapers "array of name+price"
+    }
+    
+    ANNOUNCEMENTS {
+        UUID id PK
+        string title
+        text message
+        string target_audience "all/admins/workers"
+        UUID target_agency_id FK
+        bool is_active
+        datetime expires_at
     }
 ```
 
@@ -84,61 +187,129 @@ erDiagram
 
 ## 🔄 3. Daily Operations Workflow
 
-The day-to-day cycle showing how stock moves from the Admin to the Worker, resulting in calculated sales and analytics.
+Day-to-day cycle: stock entry → distribution → sync → calculation.
 
 ```mermaid
 sequenceDiagram
-    participant Admin as 🏢 Admin (System)
-    participant Worker as 👷 Worker (App)
-    participant Core as ⚙️ System Logic
-    participant Data as 📊 Analytics
+    participant Admin as 🏢 Admin
+    participant API as ⚙️ FastAPI
+    participant Worker as 👷 Worker PWA
+    participant IDB as 📱 IndexedDB
+    participant DB as 🗄️ SQLite
 
-    Note over Admin, Worker: 🌅 Morning Phase
-    Admin->>Core: Set Today's Stock Available
-    Worker->>Core: View Assigned Route & Stock
-    Worker->>Core: Enter 'Taken' Quantity
-
-    Note over Admin, Worker: 🚴 Distribution Phase
-    Worker->>Worker: Offline PWA Usage
-    Worker-->>Worker: Deliver Newspapers
-
-    Note over Admin, Worker: 🌇 Evening Phase
-    Worker->>Core: Online Sync: Enter 'Returned' Quantity
+    Note over Admin, DB: 🌅 Morning Phase
+    Admin->>API: POST /admin/stock (taken per newspaper)
+    API->>DB: Insert daily_stock record
     
-    Note over Core, Data: ⚡ Automated Calculation
-    Core->>Core: Calculate: Sold = Taken - Returned
-    Core->>Data: Update Daily Revenue (Sold * Price)
-    Core->>Data: Decrement Agency Total Stock
-    Data-->>Admin: Show Daily Profit/Loss Dashboard
+    Worker->>API: GET /worker/assignments
+    API->>DB: Query assignments by worker_id + tenant_id
+    API-->>Worker: Customer list with route order
+
+    Note over Worker, IDB: 🚴 Distribution Phase (Possibly Offline)
+    Worker->>IDB: Cache delivery updates locally
+    Worker->>Worker: Deliver newspapers on route
+
+    Note over Worker, DB: 🌇 Evening Phase
+    Worker->>IDB: Enter returned quantities
+    IDB-->>API: POST /worker/offline-sync (auto when online)
+    API->>DB: Process batch updates
+    
+    Note over API, DB: ⚡ Automated
+    DB->>DB: sold = taken - returned (computed)
+    API-->>Admin: Dashboard stats updated
 ```
 
 ---
 
-## 📅 4. Monthly SaaS & Billing Cycle
-
-How the system handles complex monthly operations, protecting both the agency and the platform owner.
+## 📅 4. Monthly Billing Cycle
 
 ```mermaid
-stateDiagram-v2
-    [*] --> EndOfMonth
+sequenceDiagram
+    participant Admin as 🏢 Admin
+    participant API as ⚙️ FastAPI
+    participant DB as 🗄️ SQLite
+
+    Admin->>API: POST /admin/billing/generate
+    API->>DB: Query active subscriptions for month
     
-    state "Monthly Cron Job Starts (1st of Month)" as StartJob
-    EndOfMonth --> StartJob
+    loop For each customer
+        API->>API: Calculate TotalBill = Σ(Price × Qty × Days) + DeliveryFee
+        API->>DB: Insert invoice (status: pending)
+    end
     
-    state "Agency Actions" as AgencyTier {
-        GenerateCustomerBills: Calc (Price x Status) + DeliveryFee
-        GenerateSalaries: Calc (Delivery Count x Commission) -> Worker
-        StockReconciliation: Calculate Monthly Wasted Stock
-    }
+    API-->>Admin: Invoices generated
+    Admin->>API: GET /admin/invoices
+    API-->>Admin: List of pending/paid invoices
     
-    state "Super Admin / Platform Actions" as SATier {
-        SaaSCharge: Bill Agency via Stripe ($50/mo)
-        PlatformBackup: Central pg_dump execution
-    }
+    Admin->>API: PUT /admin/invoices/{id}/pay
+    API->>DB: Update status to "paid"
+```
+
+---
+
+## 💾 5. Google Drive Backup Flow
+
+```mermaid
+sequenceDiagram
+    participant Admin as 🏢 Admin
+    participant API as ⚙️ FastAPI
+    participant GD as 📁 Google Drive
+
+    Note over Admin, GD: One-time Setup
+    Admin->>API: GET /admin/backup/google/connect
+    API-->>Admin: Redirect to Google OAuth consent
+    Admin->>API: GET /admin/backup/google/callback (auth code)
+    API->>API: Exchange code for refresh_token
+    API->>API: Encrypt token with Fernet
+    API->>API: Store encrypted token in agencies table
+
+    Note over Admin, GD: Trigger Backup
+    Admin->>API: POST /admin/backup/trigger
+    API->>API: Generate Excel via openpyxl
+    API->>GD: Upload Excel to admin's Drive folder
+    GD-->>API: File ID confirmation
+    API-->>Admin: Backup complete
+
+    Note over Admin, GD: Browse Backups
+    Admin->>API: GET /admin/backup/files/{subfolder}
+    API->>GD: List files in subfolder
+    GD-->>API: File list
+    API-->>Admin: Display backup files
+```
+
+---
+
+## 🔐 6. Authentication & Role Routing
+
+```mermaid
+flowchart TD
+    Login["/login page"] --> Submit["POST /auth/login"]
+    Submit --> JWT["JWT returned with role + tenant_id"]
     
-    StartJob --> AgencyTier
-    StartJob --> SATier
+    JWT --> Check{role?}
+    Check -->|super_admin| SA["/superadmin/dashboard"]
+    Check -->|admin| AD["/admin/dashboard"]
+    Check -->|worker| WK["/worker/dashboard"]
     
-    AgencyTier --> InvoicesSent
-    SATier --> AgencyRenewed
+    SA --> SA_Pages["7 pages: Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings"]
+    AD --> AD_Pages["9 pages: Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup"]
+    WK --> WK_Pages["1 page: Assignments + Offline Sync"]
+```
+
+---
+
+## 🛡️ 7. Tenant Isolation Flow
+
+```mermaid
+flowchart LR
+    Request["HTTP Request"] --> MW["TenantMiddleware"]
+    MW --> Open{"Open route?"}
+    Open -->|Yes| Pass["Skip auth"]
+    Open -->|No| Decode["Decode JWT"]
+    Decode --> Extract["Extract tenant_id, role, user_id"]
+    Extract --> Inject["Inject into request.state"]
+    Inject --> RoleCheck{"Has tenant_id OR super_admin?"}
+    RoleCheck -->|No| Reject["403: Tenant ID required"]
+    RoleCheck -->|Yes| Handler["Route Handler"]
+    Handler --> Query["DB query filtered by tenant_id"]
 ```
