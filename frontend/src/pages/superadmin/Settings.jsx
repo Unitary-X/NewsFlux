@@ -1,297 +1,450 @@
 import React, { useState, useEffect } from 'react';
-import { Settings as SettingsIcon, Globe, Bell, Shield, Save, UserPlus, Users, Loader2, Trash2 } from 'lucide-react';
 import api from '../../utils/api';
+import { Settings as SettingsIcon, Shield, Plus, Trash2, Loader2, FileText, CreditCard, Layout, Bell, Save, DollarSign, Newspaper } from 'lucide-react';
 
 export default function Settings() {
-    const [settings, setSettings] = useState({
-        platformName: 'NewsFlux',
-        supportEmail: 'support@newsflux.io',
-        maxAgencies: 100,
-        trialDays: 14,
-        maintenanceMode: false,
-        emailNotifications: true,
-        auditLogRetentionDays: 90,
-    });
-    const [saved, setSaved] = useState(false);
-
-    // Super admin management
-    const [superAdmins, setSuperAdmins] = useState([]);
-    const [newAdmin, setNewAdmin] = useState({ username: '', password: '' });
-    const [isCreating, setIsCreating] = useState(false);
-    const [adminError, setAdminError] = useState('');
-    const [adminSuccess, setAdminSuccess] = useState('');
-
-    useEffect(() => {
-        fetchSuperAdmins();
-    }, []);
-
-    const fetchSuperAdmins = async () => {
-        try {
-            const res = await api.get('/superadmin/super-admins');
-            setSuperAdmins(res.data);
-        } catch (err) {
-            console.error(err);
-        }
-    };
-
-    const handleCreateSuperAdmin = async (e) => {
-        e.preventDefault();
-        setIsCreating(true);
-        setAdminError('');
-        setAdminSuccess('');
-        try {
-            await api.post('/superadmin/super-admins', newAdmin);
-            setNewAdmin({ username: '', password: '' });
-            setAdminSuccess('Super admin created successfully.');
-            setTimeout(() => setAdminSuccess(''), 3000);
-            fetchSuperAdmins();
-        } catch (err) {
-            setAdminError(err.response?.data?.detail || 'Failed to create super admin.');
-        } finally {
-            setIsCreating(false);
-        }
-    };
-
-    const handleDeleteSuperAdmin = async (id, username) => {
-        if (!window.confirm(`Delete super admin "${username}"? This cannot be undone.`)) return;
-        setAdminError('');
-        try {
-            await api.delete(`/superadmin/super-admins/${id}`);
-            fetchSuperAdmins();
-        } catch (err) {
-            setAdminError(err.response?.data?.detail || 'Failed to delete super admin.');
-        }
-    };
-
-    const handleChange = (key, value) => {
-        setSettings(s => ({ ...s, [key]: value }));
-        setSaved(false);
-    };
-
-    const handleSave = () => {
-        // In production this would call a backend endpoint
-        setSaved(true);
-        setTimeout(() => setSaved(false), 2000);
-    };
+    const [activeTab, setActiveTab] = useState('general');
+    const tabs = [
+        { id: 'general', label: 'General', icon: SettingsIcon },
+        { id: 'templates', label: 'Agency Templates', icon: Layout },
+        { id: 'billing', label: 'Billing Plans', icon: CreditCard },
+        { id: 'admins', label: 'Super Admins', icon: Shield },
+    ];
 
     return (
-        <div className="p-8 text-slate-300 space-y-8 max-w-3xl">
+        <div className="p-8 text-slate-300 space-y-6">
             <div className="text-xs font-mono text-slate-600 tracking-widest uppercase">
                 Home &bull; Settings
             </div>
             <div className="flex items-center gap-3">
                 <SettingsIcon className="w-6 h-6 text-indigo-400" />
-                <h1 className="text-2xl font-bold text-white">Platform Settings</h1>
+                <h1 className="text-2xl font-bold text-white">Settings</h1>
             </div>
 
-            {/* General */}
-            <Section icon={Globe} title="General">
-                <Field label="Platform Name">
-                    <input
-                        type="text"
-                        value={settings.platformName}
-                        onChange={e => handleChange('platformName', e.target.value)}
-                        className="input-field"
-                    />
-                </Field>
-                <Field label="Support Email">
-                    <input
-                        type="email"
-                        value={settings.supportEmail}
-                        onChange={e => handleChange('supportEmail', e.target.value)}
-                        className="input-field"
-                    />
-                </Field>
-                <Field label="Max Agencies">
-                    <input
-                        type="number"
-                        value={settings.maxAgencies}
-                        onChange={e => handleChange('maxAgencies', Number(e.target.value))}
-                        className="input-field w-32"
-                    />
-                </Field>
-                <Field label="Free Trial Days">
-                    <input
-                        type="number"
-                        value={settings.trialDays}
-                        onChange={e => handleChange('trialDays', Number(e.target.value))}
-                        className="input-field w-32"
-                    />
-                </Field>
-            </Section>
+            {/* Tab Navigation */}
+            <div className="flex gap-1 bg-slate-900/60 border border-slate-700/40 rounded-xl p-1">
+                {tabs.map(tab => (
+                    <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeTab === tab.id
+                                ? 'bg-indigo-500/20 text-indigo-400'
+                                : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
+                            }`}>
+                        <tab.icon className="w-3.5 h-3.5" />
+                        {tab.label}
+                    </button>
+                ))}
+            </div>
 
-            {/* Notifications */}
-            <Section icon={Bell} title="Notifications">
-                <Field label="Email Notifications">
-                    <Toggle
-                        checked={settings.emailNotifications}
-                        onChange={v => handleChange('emailNotifications', v)}
-                    />
-                </Field>
-            </Section>
+            {activeTab === 'general' && <GeneralSettings />}
+            {activeTab === 'templates' && <TemplateSettings />}
+            {activeTab === 'billing' && <BillingPlansSettings />}
+            {activeTab === 'admins' && <AdminManagement />}
+        </div>
+    );
+}
 
-            {/* Security */}
-            <Section icon={Shield} title="Security & Maintenance">
-                <Field label="Maintenance Mode">
-                    <Toggle
-                        checked={settings.maintenanceMode}
-                        onChange={v => handleChange('maintenanceMode', v)}
-                    />
-                    <span className="text-xs text-slate-500 ml-3">Blocks all non-super-admin access</span>
-                </Field>
-                <Field label="Audit Log Retention (days)">
-                    <input
-                        type="number"
-                        value={settings.auditLogRetentionDays}
-                        onChange={e => handleChange('auditLogRetentionDays', Number(e.target.value))}
-                        className="input-field w-32"
-                    />
-                </Field>
-            </Section>
+// ─── General Settings ──────────────────
+function GeneralSettings() {
+    const [settings, setSettings] = useState({
+        platform_name: 'NewsFlux', support_email: 'support@newsflux.app',
+        max_agencies: 500, trial_days: 14, maintenance_mode: false,
+        enable_notifications: true, audit_log_retention: 90,
+    });
 
-            {/* Super Admin Management */}
-            <Section icon={Users} title="Super Admin Management">
-                <div className="space-y-4">
-                    {/* Existing super admins list */}
-                    <div>
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Current Super Admins</p>
-                        <div className="space-y-2">
-                            {superAdmins.length === 0 ? (
-                                <p className="text-xs text-slate-600">No super admins loaded.</p>
-                            ) : superAdmins.map(sa => (
-                                <div key={sa.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg px-4 py-2.5">
-                                    <div className="flex items-center gap-3">
-                                        <div className="w-8 h-8 bg-indigo-500/20 rounded-full flex items-center justify-center">
-                                            <span className="text-indigo-400 text-xs font-bold uppercase">{sa.username.charAt(0)}</span>
-                                        </div>
-                                        <span className="text-sm text-white font-medium">{sa.username}</span>
+    return (
+        <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 space-y-6">
+            <h3 className="text-white font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4 text-indigo-400" /> General</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field label="Platform Name" value={settings.platform_name} onChange={v => setSettings({ ...settings, platform_name: v })} />
+                <Field label="Support Email" value={settings.support_email} onChange={v => setSettings({ ...settings, support_email: v })} />
+                <Field label="Max Agencies" type="number" value={settings.max_agencies} onChange={v => setSettings({ ...settings, max_agencies: parseInt(v) })} />
+                <Field label="Trial Days" type="number" value={settings.trial_days} onChange={v => setSettings({ ...settings, trial_days: parseInt(v) })} />
+                <Field label="Audit Log Retention (days)" type="number" value={settings.audit_log_retention} onChange={v => setSettings({ ...settings, audit_log_retention: parseInt(v) })} />
+            </div>
+            <div className="flex gap-6">
+                <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={settings.maintenance_mode} onChange={e => setSettings({ ...settings, maintenance_mode: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-600 accent-indigo-500" />
+                    <span className="text-slate-400">Maintenance Mode</span>
+                </label>
+                <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" checked={settings.enable_notifications} onChange={e => setSettings({ ...settings, enable_notifications: e.target.checked })}
+                        className="w-4 h-4 rounded border-slate-600 accent-indigo-500" />
+                    <span className="text-slate-400">Enable Notifications</span>
+                </label>
+            </div>
+            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors text-xs font-bold">
+                <Save className="w-3.5 h-3.5" /> Save Settings
+            </button>
+        </div>
+    );
+}
+
+// ─── Agency Templates ──────────────────
+function TemplateSettings() {
+    const [templates, setTemplates] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showCreate, setShowCreate] = useState(false);
+    const [form, setForm] = useState({ name: '', region: '', newspapers: [{ name: '', base_price: '' }] });
+    const [creating, setCreating] = useState(false);
+
+    useEffect(() => {
+        api.get('/superadmin/templates').then(res => setTemplates(res.data)).finally(() => setLoading(false));
+    }, []);
+
+    const addNewspaper = () => setForm({ ...form, newspapers: [...form.newspapers, { name: '', base_price: '' }] });
+    const removeNewspaper = (idx) => setForm({ ...form, newspapers: form.newspapers.filter((_, i) => i !== idx) });
+    const updateNewspaper = (idx, field, value) => {
+        const updated = [...form.newspapers];
+        updated[idx][field] = value;
+        setForm({ ...form, newspapers: updated });
+    };
+
+    const handleCreate = async (e) => {
+        e.preventDefault();
+        setCreating(true);
+        try {
+            const payload = {
+                name: form.name, region: form.region,
+                newspapers: form.newspapers.filter(n => n.name).map(n => ({ name: n.name, base_price: parseFloat(n.base_price) || 0 })),
+            };
+            await api.post('/superadmin/templates', payload);
+            setForm({ name: '', region: '', newspapers: [{ name: '', base_price: '' }] });
+            setShowCreate(false);
+            const res = await api.get('/superadmin/templates');
+            setTemplates(res.data);
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed');
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this template?')) return;
+        await api.delete(`/superadmin/templates/${id}`);
+        setTemplates(templates.filter(t => t.id !== id));
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2"><Layout className="w-4 h-4 text-cyan-400" /> Agency Templates</h3>
+                <button onClick={() => setShowCreate(!showCreate)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 rounded-lg transition-colors text-xs font-bold">
+                    <Plus className="w-3 h-3" /> New Template
+                </button>
+            </div>
+
+            {showCreate && (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-cyan-500/20 rounded-2xl p-6">
+                    <form onSubmit={handleCreate} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Template Name</label>
+                                <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" placeholder="South India Standard" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Region</label>
+                                <input value={form.region} onChange={e => setForm({ ...form, region: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-cyan-500" placeholder="Tamil Nadu" />
+                            </div>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-2">Newspapers</label>
+                            <div className="space-y-2">
+                                {form.newspapers.map((np, idx) => (
+                                    <div key={idx} className="flex gap-2 items-center">
+                                        <input value={np.name} onChange={e => updateNewspaper(idx, 'name', e.target.value)} placeholder="The Hindu"
+                                            className="flex-1 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-cyan-500" />
+                                        <input type="number" step="0.01" value={np.base_price} onChange={e => updateNewspaper(idx, 'base_price', e.target.value)} placeholder="₹ Price"
+                                            className="w-24 bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-sm focus:outline-none focus:border-cyan-500" />
+                                        {form.newspapers.length > 1 && (
+                                            <button type="button" onClick={() => removeNewspaper(idx)} className="p-1 text-slate-600 hover:text-red-400"><Trash2 className="w-3.5 h-3.5" /></button>
+                                        )}
                                     </div>
-                                    <div className="flex items-center gap-2">
-                                        <span className="text-[10px] uppercase tracking-widest text-indigo-400 font-bold bg-indigo-500/10 px-2 py-1 rounded">super_admin</span>
-                                        <button
-                                            onClick={() => handleDeleteSuperAdmin(sa.id, sa.username)}
-                                            className="p-1.5 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 transition-colors"
-                                            title="Delete"
-                                        >
+                                ))}
+                            </div>
+                            <button type="button" onClick={addNewspaper} className="mt-2 text-xs text-cyan-400 hover:text-cyan-300 font-bold">+ Add newspaper</button>
+                        </div>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-800">Cancel</button>
+                            <button type="submit" disabled={creating} className="px-4 py-2 text-sm bg-cyan-500/20 text-cyan-400 border border-cyan-500/20 rounded-lg hover:bg-cyan-500/30 disabled:opacity-50">
+                                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Template'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="text-center py-8 text-slate-600 text-sm animate-pulse">Loading...</div>
+            ) : templates.length === 0 ? (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-8 text-center">
+                    <Layout className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-slate-600 text-sm">No templates yet. Create one to pre-seed new agencies with newspapers.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {templates.map(t => (
+                        <div key={t.id} className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                            <div className="flex justify-between items-start mb-3">
+                                <div>
+                                    <h4 className="text-white font-bold text-sm">{t.name}</h4>
+                                    {t.region && <span className="text-[10px] text-slate-500 font-mono">{t.region}</span>}
+                                </div>
+                                <button onClick={() => handleDelete(t.id)} className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                            </div>
+                            <div className="text-xs text-slate-400 space-y-1">
+                                {(t.newspapers || []).map((np, i) => (
+                                    <div key={i} className="flex justify-between items-center bg-slate-800/40 rounded px-2 py-1">
+                                        <span className="flex items-center gap-1"><Newspaper className="w-3 h-3 text-slate-600" />{np.name}</span>
+                                        <span className="font-mono text-slate-500">₹{np.base_price}</span>
+                                    </div>
+                                ))}
+                                {(!t.newspapers || t.newspapers.length === 0) && <span className="text-slate-600">No newspapers</span>}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Billing Plans ──────────────────
+function BillingPlansSettings() {
+    const [plans, setPlans] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showCreate, setShowCreate] = useState(false);
+    const [form, setForm] = useState({ name: '', max_workers: 5, max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
+    const [creating, setCreating] = useState(false);
+
+    const fetchPlans = () => api.get('/superadmin/billing-plans').then(res => setPlans(res.data)).finally(() => setLoading(false));
+    useEffect(() => { fetchPlans(); }, []);
+
+    const handleCreate = async (e) => {
+        e.preventDefault();
+        setCreating(true);
+        try {
+            await api.post('/superadmin/billing-plans', {
+                name: form.name, max_workers: parseInt(form.max_workers),
+                max_customers: parseInt(form.max_customers),
+                price_monthly: parseFloat(form.price_monthly),
+                billing_cycle: form.billing_cycle,
+            });
+            setForm({ name: '', max_workers: 5, max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
+            setShowCreate(false);
+            fetchPlans();
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed');
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this billing plan? It will be unassigned from all agencies.')) return;
+        await api.delete(`/superadmin/billing-plans/${id}`);
+        fetchPlans();
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2"><CreditCard className="w-4 h-4 text-amber-400" /> Billing Plans</h3>
+                <button onClick={() => setShowCreate(!showCreate)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg transition-colors text-xs font-bold">
+                    <Plus className="w-3 h-3" /> New Plan
+                </button>
+            </div>
+
+            {showCreate && (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-amber-500/20 rounded-2xl p-6">
+                    <form onSubmit={handleCreate} className="space-y-4">
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Plan Name</label>
+                                <input required value={form.name} onChange={e => setForm({ ...form, name: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" placeholder="Pro" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Billing Cycle</label>
+                                <select value={form.billing_cycle} onChange={e => setForm({ ...form, billing_cycle: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500">
+                                    <option value="monthly">Monthly</option>
+                                    <option value="yearly">Yearly</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-3 gap-3">
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Max Workers</label>
+                                <input type="number" required value={form.max_workers} onChange={e => setForm({ ...form, max_workers: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Max Customers</label>
+                                <input type="number" required value={form.max_customers} onChange={e => setForm({ ...form, max_customers: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-semibold text-slate-400 mb-1">Price (₹/month)</label>
+                                <input type="number" step="0.01" required value={form.price_monthly} onChange={e => setForm({ ...form, price_monthly: e.target.value })}
+                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
+                            </div>
+                        </div>
+                        <div className="flex gap-2">
+                            <button type="button" onClick={() => setShowCreate(false)} className="px-4 py-2 text-sm text-slate-400 border border-slate-700 rounded-lg hover:bg-slate-800">Cancel</button>
+                            <button type="submit" disabled={creating} className="px-4 py-2 text-sm bg-amber-500/20 text-amber-400 border border-amber-500/20 rounded-lg hover:bg-amber-500/30 disabled:opacity-50">
+                                {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create Plan'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="text-center py-8 text-slate-600 text-sm animate-pulse">Loading...</div>
+            ) : plans.length === 0 ? (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-8 text-center">
+                    <CreditCard className="w-8 h-8 text-slate-700 mx-auto mb-2" />
+                    <p className="text-slate-600 text-sm">No billing plans. Create plans and assign them to agencies.</p>
+                </div>
+            ) : (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    {plans.map(p => (
+                        <div key={p.id} className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5 relative group">
+                            <button onClick={() => handleDelete(p.id)}
+                                className="absolute top-3 right-3 p-1.5 text-slate-700 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors opacity-0 group-hover:opacity-100">
+                                <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                            <div className="text-xs text-slate-500 uppercase tracking-widest font-bold mb-1">{p.billing_cycle}</div>
+                            <h4 className="text-white font-bold text-lg">{p.name}</h4>
+                            <div className="mt-3 flex items-baseline gap-1">
+                                <span className="text-3xl font-black text-amber-400">₹{p.price_monthly}</span>
+                                <span className="text-xs text-slate-500">/month</span>
+                            </div>
+                            <div className="mt-4 space-y-2 text-xs text-slate-400">
+                                <div className="flex justify-between"><span>Max Workers</span><span className="text-white font-bold">{p.max_workers}</span></div>
+                                <div className="flex justify-between"><span>Max Customers</span><span className="text-white font-bold">{p.max_customers}</span></div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ─── Admin Management ──────────────────
+function AdminManagement() {
+    const [admins, setAdmins] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [showCreate, setShowCreate] = useState(false);
+    const [form, setForm] = useState({ username: '', password: '' });
+    const [creating, setCreating] = useState(false);
+
+    const fetchAdmins = () => api.get('/superadmin/super-admins').then(res => setAdmins(res.data)).finally(() => setLoading(false));
+    useEffect(() => { fetchAdmins(); }, []);
+
+    const handleCreate = async (e) => {
+        e.preventDefault();
+        setCreating(true);
+        try {
+            await api.post('/superadmin/super-admins', form);
+            setForm({ username: '', password: '' });
+            setShowCreate(false);
+            fetchAdmins();
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed');
+        } finally {
+            setCreating(false);
+        }
+    };
+
+    const handleDelete = async (id) => {
+        if (!window.confirm('Delete this super admin?')) return;
+        try {
+            await api.delete(`/superadmin/super-admins/${id}`);
+            fetchAdmins();
+        } catch (err) {
+            alert(err.response?.data?.detail || 'Failed');
+        }
+    };
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center">
+                <h3 className="text-white font-bold flex items-center gap-2"><Shield className="w-4 h-4 text-red-400" /> Super Admin Accounts</h3>
+                <button onClick={() => setShowCreate(!showCreate)}
+                    className="flex items-center gap-2 px-3 py-1.5 bg-red-500/10 hover:bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg transition-colors text-xs font-bold">
+                    <Plus className="w-3 h-3" /> New Admin
+                </button>
+            </div>
+
+            {showCreate && (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-red-500/20 rounded-2xl p-6">
+                    <form onSubmit={handleCreate} className="flex gap-3 items-end">
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">Username</label>
+                            <input required value={form.username} onChange={e => setForm({ ...form, username: e.target.value })}
+                                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500" />
+                        </div>
+                        <div className="flex-1">
+                            <label className="block text-xs font-semibold text-slate-400 mb-1">Password</label>
+                            <input required type="password" value={form.password} onChange={e => setForm({ ...form, password: e.target.value })}
+                                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-red-500" />
+                        </div>
+                        <button type="submit" disabled={creating} className="px-4 py-2 bg-red-500/20 text-red-400 border border-red-500/20 rounded-lg text-sm hover:bg-red-500/30 disabled:opacity-50">
+                            {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
+                        </button>
+                    </form>
+                </div>
+            )}
+
+            {loading ? (
+                <div className="text-center py-8 text-slate-600 text-sm animate-pulse">Loading...</div>
+            ) : (
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl overflow-hidden">
+                    <table className="w-full text-left">
+                        <thead>
+                            <tr className="text-[11px] tracking-widest text-slate-500 uppercase font-bold bg-slate-900/50">
+                                <th className="px-5 py-3">Username</th>
+                                <th className="px-5 py-3">Role</th>
+                                <th className="px-5 py-3 text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-800/40">
+                            {admins.map(a => (
+                                <tr key={a.id} className="hover:bg-slate-800/20">
+                                    <td className="px-5 py-3 text-white font-medium">{a.username}</td>
+                                    <td className="px-5 py-3"><span className="text-[10px] bg-red-500/10 text-red-400 border border-red-500/20 px-2 py-0.5 rounded-full font-bold uppercase tracking-wider">{a.role}</span></td>
+                                    <td className="px-5 py-3 text-right">
+                                        <button onClick={() => handleDelete(a.id)} className="p-1.5 text-slate-600 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors">
                                             <Trash2 className="w-3.5 h-3.5" />
                                         </button>
-                                    </div>
-                                </div>
+                                    </td>
+                                </tr>
                             ))}
-                        </div>
-                    </div>
-
-                    {/* Create new super admin */}
-                    <div className="border-t border-slate-700/40 pt-4">
-                        <p className="text-xs font-bold text-slate-500 uppercase tracking-wider mb-3">Create New Super Admin</p>
-                        {adminError && (
-                            <div className="mb-3 p-2.5 bg-red-500/10 border border-red-500/20 rounded-lg">
-                                <p className="text-red-400 text-xs font-semibold">{adminError}</p>
-                            </div>
-                        )}
-                        {adminSuccess && (
-                            <div className="mb-3 p-2.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-                                <p className="text-emerald-400 text-xs font-semibold">{adminSuccess}</p>
-                            </div>
-                        )}
-                        <form onSubmit={handleCreateSuperAdmin} className="flex items-end gap-3">
-                            <div className="flex-1">
-                                <label className="block text-xs text-slate-500 mb-1">Username</label>
-                                <input
-                                    required
-                                    value={newAdmin.username}
-                                    onChange={e => setNewAdmin({ ...newAdmin, username: e.target.value })}
-                                    placeholder="new_super_admin"
-                                    className="input-field w-full"
-                                />
-                            </div>
-                            <div className="flex-1">
-                                <label className="block text-xs text-slate-500 mb-1">Password</label>
-                                <input
-                                    required
-                                    type="password"
-                                    value={newAdmin.password}
-                                    onChange={e => setNewAdmin({ ...newAdmin, password: e.target.value })}
-                                    placeholder="••••••••"
-                                    className="input-field w-full"
-                                />
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={isCreating}
-                                className="flex items-center gap-2 bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 font-bold py-2 px-4 rounded-lg transition-colors text-xs disabled:opacity-50"
-                            >
-                                {isCreating ? <Loader2 className="w-3 h-3 animate-spin" /> : <UserPlus className="w-3 h-3" />}
-                                Create
-                            </button>
-                        </form>
-                    </div>
+                        </tbody>
+                    </table>
                 </div>
-            </Section>
-
-            {/* Save */}
-            <div className="pt-2">
-                <button
-                    onClick={handleSave}
-                    className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-500 text-white font-bold py-2.5 px-6 rounded-lg transition-colors"
-                >
-                    <Save className="w-4 h-4" />
-                    Save Settings
-                </button>
-                {saved && (
-                    <span className="text-emerald-400 text-xs font-bold ml-4 animate-pulse">Settings saved.</span>
-                )}
-            </div>
-
-            <style>{`
-                .input-field {
-                    background: rgba(15, 23, 42, 0.6);
-                    border: 1px solid rgba(51, 65, 85, 0.5);
-                    border-radius: 0.5rem;
-                    padding: 0.5rem 0.75rem;
-                    color: #e2e8f0;
-                    font-size: 0.875rem;
-                    outline: none;
-                    transition: border-color 0.15s, box-shadow 0.15s;
-                }
-                .input-field:focus {
-                    border-color: rgba(99, 102, 241, 0.5);
-                    box-shadow: 0 0 0 2px rgba(99, 102, 241, 0.15);
-                }
-            `}</style>
+            )}
         </div>
     );
 }
 
-function Section({ icon: Icon, title, children }) {
+// ─── Helpers ──────────────────
+function Field({ label, value, onChange, type = 'text' }) {
     return (
-        <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 space-y-4">
-            <div className="flex items-center gap-2 mb-1">
-                <Icon className="w-4 h-4 text-indigo-400" />
-                <h3 className="text-white font-bold">{title}</h3>
-            </div>
-            {children}
+        <div>
+            <label className="block text-xs font-semibold text-slate-400 mb-1">{label}</label>
+            <input type={type} value={value} onChange={e => onChange(e.target.value)}
+                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500" />
         </div>
-    );
-}
-
-function Field({ label, children }) {
-    return (
-        <div className="flex items-center justify-between gap-4">
-            <label className="text-sm text-slate-400 shrink-0">{label}</label>
-            <div className="flex items-center">{children}</div>
-        </div>
-    );
-}
-
-function Toggle({ checked, onChange }) {
-    return (
-        <button
-            type="button"
-            onClick={() => onChange(!checked)}
-            className={`relative w-11 h-6 rounded-full transition-colors ${checked ? 'bg-indigo-600' : 'bg-slate-700'}`}
-        >
-            <span className={`absolute top-0.5 left-0.5 w-5 h-5 rounded-full bg-white shadow transition-transform ${checked ? 'translate-x-5' : ''}`} />
-        </button>
     );
 }

@@ -75,3 +75,22 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
 
     db.commit()
     return {"message": "Offline sync resolved successfully", "processed_stock": len(payload.stock_updates), "processed_deliveries": len(payload.delivery_updates)}
+
+
+@router.get("/announcements", dependencies=[Depends(require_role(["worker"]))])
+def get_announcements(request: Request, db: Session = Depends(get_db)):
+    """Returns active announcements relevant to this worker's agency."""
+    from app.models.models import Announcement
+    from datetime import datetime
+    tid = request.state.tenant_id
+    now = datetime.utcnow()
+    anns = db.query(Announcement).filter(
+        Announcement.is_active == True,
+        (Announcement.expires_at == None) | (Announcement.expires_at > now),
+        (Announcement.target_audience.in_(["all", "workers"])) |
+        ((Announcement.target_audience == "specific_agency") & (Announcement.target_agency_id == tid))
+    ).order_by(Announcement.created_at.desc()).all()
+    return [{
+        "id": str(a.id), "title": a.title, "message": a.message,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    } for a in anns]

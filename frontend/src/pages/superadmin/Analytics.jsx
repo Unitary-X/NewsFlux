@@ -1,25 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
-import { BarChart3, TrendingUp, Users, Building2, Newspaper } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, LineChart, Line, AreaChart, Area } from 'recharts';
+import { BarChart3, TrendingUp, TrendingDown, Users, Building2, Newspaper, Activity } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, ComposedChart, Line } from 'recharts';
 
 export default function Analytics() {
     const [analytics, setAnalytics] = useState(null);
     const [growth, setGrowth] = useState([]);
     const [topAgencies, setTopAgencies] = useState([]);
+    const [churn, setChurn] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const load = async () => {
             try {
-                const [aRes, gRes, tRes] = await Promise.all([
+                const [aRes, gRes, tRes, cRes] = await Promise.all([
                     api.get('/superadmin/analytics'),
                     api.get('/superadmin/analytics/growth'),
                     api.get('/superadmin/analytics/top-agencies'),
+                    api.get('/superadmin/analytics/churn'),
                 ]);
                 setAnalytics(aRes.data);
                 setGrowth(gRes.data);
                 setTopAgencies(tRes.data);
+                setChurn(cRes.data);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -44,6 +47,10 @@ export default function Analytics() {
         return { month: g.month, total: cumulative, new: g.count };
     });
 
+    // Latest churn metrics
+    const latestChurn = churn.length > 0 ? churn[churn.length - 1] : null;
+    const prevChurn = churn.length > 1 ? churn[churn.length - 2] : null;
+
     return (
         <div className="p-8 text-slate-300 space-y-8">
             <div className="text-xs font-mono text-slate-600 tracking-widest uppercase">
@@ -62,6 +69,35 @@ export default function Analytics() {
                 <StatBox label="Customers" value={analytics?.total_customers} icon={Users} />
                 <StatBox label="Newspapers" value={analytics?.total_newspapers} icon={Newspaper} />
                 <StatBox label="Invoices" value={analytics?.total_invoices} icon={TrendingUp} />
+            </div>
+
+            {/* Churn & Growth KPI Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Net Active Agencies</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-3xl font-black text-white">{latestChurn?.net_active ?? 0}</span>
+                        {latestChurn?.growth_rate != null && (
+                            <span className={`text-xs font-bold flex items-center gap-0.5 ${latestChurn.growth_rate >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {latestChurn.growth_rate >= 0
+                                    ? <><TrendingUp className="w-3 h-3" /> +{latestChurn.growth_rate}%</>
+                                    : <><TrendingDown className="w-3 h-3" /> {latestChurn.growth_rate}%</>
+                                }
+                            </span>
+                        )}
+                    </div>
+                    <p className="text-[10px] text-slate-600 mt-1">Month-over-Month growth rate</p>
+                </div>
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">New This Month</p>
+                    <span className="text-3xl font-black text-emerald-400">{latestChurn?.new_agencies ?? 0}</span>
+                    <p className="text-[10px] text-slate-600 mt-1">Agencies onboarded</p>
+                </div>
+                <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-5">
+                    <p className="text-xs text-slate-500 uppercase tracking-wider font-bold mb-1">Churn (Suspended)</p>
+                    <span className="text-3xl font-black text-red-400">{latestChurn?.churned ?? 0}</span>
+                    <p className="text-[10px] text-slate-600 mt-1">Total suspended agencies</p>
+                </div>
             </div>
 
             {/* Charts Row */}
@@ -99,6 +135,29 @@ export default function Analytics() {
                         </AreaChart>
                     </ResponsiveContainer>
                 </div>
+            </div>
+
+            {/* Churn vs Growth Chart */}
+            <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-white font-bold">Churn & Growth Trend</h3>
+                    <div className="flex gap-4 text-xs">
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-emerald-500 rounded-sm"></span> New</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-red-500 rounded-sm"></span> Churned</span>
+                        <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-sm"></span> Net Active</span>
+                    </div>
+                </div>
+                <ResponsiveContainer width="100%" height={280}>
+                    <ComposedChart data={churn}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                        <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} />
+                        <YAxis tick={{ fill: '#94a3b8', fontSize: 10 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                        <Tooltip contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '8px', color: '#e2e8f0' }} />
+                        <Bar dataKey="new_agencies" name="New" fill="#34d399" radius={[3, 3, 0, 0]} barSize={20} />
+                        <Bar dataKey="churned" name="Churned" fill="#f87171" radius={[3, 3, 0, 0]} barSize={20} />
+                        <Line type="monotone" dataKey="net_active" name="Net Active" stroke="#818cf8" strokeWidth={2} dot={{ r: 3, fill: '#818cf8' }} />
+                    </ComposedChart>
+                </ResponsiveContainer>
             </div>
 
             {/* Top Agencies Detail Table */}

@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, BarChart3, ScrollText, Activity, Settings, LogOut, ShieldAlert, Globe } from 'lucide-react';
+import { LayoutDashboard, Building2, BarChart3, ScrollText, Activity, Settings, LogOut, ShieldAlert, Globe, Megaphone } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -16,6 +16,7 @@ export default function SuperAdminSidebar() {
         { to: "/superadmin", label: t('superadmin.dashboard'), icon: LayoutDashboard, end: true },
         { to: "/superadmin/agencies", label: t('superadmin.agencies'), icon: Building2 },
         { to: "/superadmin/analytics", label: t('superadmin.analytics'), icon: BarChart3 },
+        { to: "/superadmin/announcements", label: "Announcements", icon: Megaphone },
         { to: "/superadmin/audit-logs", label: t('superadmin.audit_logs'), icon: ScrollText },
         { to: "/superadmin/system", label: t('superadmin.system_health'), icon: Activity },
         { to: "/superadmin/settings", label: t('superadmin.settings'), icon: Settings },

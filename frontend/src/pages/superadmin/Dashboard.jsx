@@ -1,25 +1,28 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import { Building2, Users, Newspaper, Activity, TrendingUp, TrendingDown, BarChart3, Trophy } from 'lucide-react';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 export default function SuperAdminDashboard() {
     const [analytics, setAnalytics] = useState(null);
     const [growth, setGrowth] = useState([]);
     const [topAgencies, setTopAgencies] = useState([]);
+    const [trends, setTrends] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
         const load = async () => {
             try {
-                const [analyticsRes, growthRes, topRes] = await Promise.all([
+                const [analyticsRes, growthRes, topRes, trendsRes] = await Promise.all([
                     api.get('/superadmin/analytics'),
                     api.get('/superadmin/analytics/growth'),
                     api.get('/superadmin/analytics/top-agencies'),
+                    api.get('/superadmin/analytics/trends'),
                 ]);
                 setAnalytics(analyticsRes.data);
                 setGrowth(growthRes.data);
                 setTopAgencies(topRes.data);
+                setTrends(trendsRes.data);
             } catch (err) {
                 console.error(err);
             } finally {
@@ -37,11 +40,21 @@ export default function SuperAdminDashboard() {
         );
     }
 
+    // Calculate real trend percentages from trends data
+    const calcTrend = (key) => {
+        if (trends.length < 2) return null;
+        const latest = trends[trends.length - 1][key] || 0;
+        const prev = trends[0][key] || 0;
+        if (prev === 0) return latest > 0 ? '+∞' : null;
+        const pct = ((latest - prev) / prev * 100).toFixed(1);
+        return pct > 0 ? `+${pct}%` : `${pct}%`;
+    };
+
     const kpis = [
-        { label: "Total Agencies", value: analytics?.total_agencies ?? 0, icon: Building2, color: "indigo", trend: "+2.5%" },
-        { label: "Total Customers", value: analytics?.total_customers ?? 0, icon: Users, color: "cyan", trend: "+0.9%" },
-        { label: "Total Newspapers", value: analytics?.total_newspapers ?? 0, icon: Newspaper, color: "emerald", trend: "+1.1%" },
-        { label: "Total Workers", value: analytics?.total_workers ?? 0, icon: Activity, color: "amber", trend: null },
+        { label: "Total Agencies", value: analytics?.total_agencies ?? 0, icon: Building2, color: "indigo", trend: calcTrend("agencies"), sparkKey: "agencies" },
+        { label: "Total Customers", value: analytics?.total_customers ?? 0, icon: Users, color: "cyan", trend: calcTrend("customers"), sparkKey: "customers" },
+        { label: "Total Newspapers", value: analytics?.total_newspapers ?? 0, icon: Newspaper, color: "emerald", trend: calcTrend("newspapers"), sparkKey: "newspapers" },
+        { label: "Total Workers", value: analytics?.total_workers ?? 0, icon: Activity, color: "amber", trend: calcTrend("workers"), sparkKey: "workers" },
     ];
 
     const pieData = [
@@ -50,8 +63,9 @@ export default function SuperAdminDashboard() {
     ];
     const PIE_COLORS = ['#34d399', '#f87171'];
 
-    const barColors = ['#818cf8', '#34d399'];
     const maxCustomers = Math.max(...topAgencies.map(a => a.customer_count), 1);
+
+    const sparkColors = { indigo: '#818cf8', cyan: '#22d3ee', emerald: '#34d399', amber: '#fbbf24' };
 
     return (
         <div className="p-8 text-slate-300 space-y-8">
@@ -60,10 +74,10 @@ export default function SuperAdminDashboard() {
                 Home &bull; Dashboard &bull; Analytics
             </div>
 
-            {/* KPI Cards */}
+            {/* KPI Cards with Sparklines */}
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
                 {kpis.map((kpi) => (
-                    <KPICard key={kpi.label} {...kpi} />
+                    <KPICard key={kpi.label} {...kpi} trends={trends} sparkColor={sparkColors[kpi.color]} />
                 ))}
             </div>
 
@@ -94,7 +108,7 @@ export default function SuperAdminDashboard() {
                     </ResponsiveContainer>
                 </div>
 
-                {/* Right column: System Activity + Top Performing */}
+                {/* Right column: System Activity + Invoice */}
                 <div className="flex flex-col gap-5">
                     {/* System Activity Donut */}
                     <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 flex-1">
@@ -183,7 +197,7 @@ export default function SuperAdminDashboard() {
     );
 }
 
-function KPICard({ label, value, icon: Icon, color, trend }) {
+function KPICard({ label, value, icon: Icon, color, trend, trends, sparkKey, sparkColor }) {
     const colorMap = {
         indigo: { bg: 'bg-indigo-500/10', border: 'border-indigo-500/20', text: 'text-indigo-400', ring: 'ring-indigo-500/30' },
         cyan: { bg: 'bg-cyan-500/10', border: 'border-cyan-500/20', text: 'text-cyan-400', ring: 'ring-cyan-500/30' },
@@ -192,22 +206,42 @@ function KPICard({ label, value, icon: Icon, color, trend }) {
     };
     const c = colorMap[color] || colorMap.indigo;
 
+    const isPositive = trend && !trend.startsWith('-');
+
     return (
-        <div className={`backdrop-blur-xl bg-slate-900/60 border ${c.border} rounded-2xl p-5 flex items-center gap-4`}>
-            <div className={`p-3 ${c.bg} rounded-xl ring-1 ${c.ring}`}>
-                <Icon className={`w-6 h-6 ${c.text}`} />
-            </div>
-            <div className="flex-1">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
-                <div className="flex items-baseline gap-2">
-                    <span className="text-2xl font-black text-white">{value.toLocaleString()}</span>
-                    {trend && (
-                        <span className="text-xs font-bold text-emerald-400 flex items-center gap-0.5">
-                            <TrendingUp className="w-3 h-3" /> {trend}
-                        </span>
-                    )}
+        <div className={`backdrop-blur-xl bg-slate-900/60 border ${c.border} rounded-2xl p-5`}>
+            <div className="flex items-center gap-4 mb-3">
+                <div className={`p-3 ${c.bg} rounded-xl ring-1 ${c.ring}`}>
+                    <Icon className={`w-6 h-6 ${c.text}`} />
+                </div>
+                <div className="flex-1">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider">{label}</p>
+                    <div className="flex items-baseline gap-2">
+                        <span className="text-2xl font-black text-white">{value.toLocaleString()}</span>
+                        {trend && (
+                            <span className={`text-xs font-bold flex items-center gap-0.5 ${isPositive ? 'text-emerald-400' : 'text-red-400'}`}>
+                                {isPositive ? <TrendingUp className="w-3 h-3" /> : <TrendingDown className="w-3 h-3" />} {trend}
+                            </span>
+                        )}
+                    </div>
                 </div>
             </div>
+            {/* Sparkline */}
+            {trends && trends.length > 0 && (
+                <div className="h-10 -mx-1">
+                    <ResponsiveContainer width="100%" height="100%">
+                        <AreaChart data={trends}>
+                            <defs>
+                                <linearGradient id={`spark-${sparkKey}`} x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor={sparkColor} stopOpacity={0.3} />
+                                    <stop offset="95%" stopColor={sparkColor} stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <Area type="monotone" dataKey={sparkKey} stroke={sparkColor} fill={`url(#spark-${sparkKey})`} strokeWidth={1.5} dot={false} />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </div>
+            )}
         </div>
     );
 }

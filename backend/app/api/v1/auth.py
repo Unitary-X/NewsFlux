@@ -1,17 +1,25 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import timedelta
+from typing import Optional
 
 from app.api.dependencies import get_db
-from app.models.models import User, Agency
+from app.models.models import User, Agency, Newspaper, AgencyTemplate
 from app.schemas.auth import LoginRequest, AgencyRegisterRequest, Token
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
+from pydantic import BaseModel
 
 router = APIRouter()
 
+class RegisterWithTemplate(BaseModel):
+    agency_name: str
+    admin_username: str
+    admin_password: str
+    template_id: Optional[str] = None
+
 @router.post("/register", response_model=Token)
-def register_agency(request: AgencyRegisterRequest, db: Session = Depends(get_db)):
+def register_agency(request: RegisterWithTemplate, db: Session = Depends(get_db)):
     # Check if namespace exists
     existing_user = db.query(User).filter(User.username == request.admin_username).first()
     if existing_user:
@@ -31,9 +39,27 @@ def register_agency(request: AgencyRegisterRequest, db: Session = Depends(get_db
         tenant_id=new_agency.id
     )
     db.add(new_admin)
+
+    # 3. If template_id provided, seed newspapers from template
+    if request.template_id:
+        try:
+            import uuid as uuid_mod
+            template_uid = uuid_mod.UUID(request.template_id)
+            template = db.query(AgencyTemplate).filter(AgencyTemplate.id == template_uid).first()
+            if template and template.newspapers:
+                for np_data in template.newspapers:
+                    newspaper = Newspaper(
+                        tenant_id=new_agency.id,
+                        name=np_data.get("name", "Unknown"),
+                        base_price=np_data.get("base_price", 0.0),
+                    )
+                    db.add(newspaper)
+        except (ValueError, TypeError):
+            pass  # Invalid template_id, just skip seeding
+
     db.commit()
 
-    # 3. Log them in automatically
+    # 4. Log them in automatically
     access_token = create_access_token(
         subject=new_admin.id,
         role=new_admin.role,

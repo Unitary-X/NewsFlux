@@ -9,7 +9,7 @@ import uuid as uuid_mod
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
     Newspaper, User, Customer, DailyStock, 
-    CustomerSubscription, WorkerAssignment, Invoice
+    CustomerSubscription, WorkerAssignment, Invoice, Agency
 )
 from app.schemas.admin import (
     NewspaperCreate, NewspaperUpdate, NewspaperResponse,
@@ -625,3 +625,227 @@ def mark_invoice_paid(request: Request, invoice_id: str, db: Session = Depends(g
     inv.status = "paid"
     db.commit()
     return {"status": "paid"}
+
+
+# ──────────────────────────────────────────────
+# ANNOUNCEMENTS
+# ──────────────────────────────────────────────
+
+@router.get("/announcements", dependencies=[Depends(require_role(["admin"]))])
+def get_announcements(request: Request, db: Session = Depends(get_db)):
+    """Returns active announcements relevant to this admin's agency."""
+    from app.models.models import Announcement
+    from datetime import datetime
+    tid = request.state.tenant_id
+    now = datetime.utcnow()
+    anns = db.query(Announcement).filter(
+        Announcement.is_active == True,
+        (Announcement.expires_at == None) | (Announcement.expires_at > now),
+        (Announcement.target_audience.in_(["all", "admins"])) |
+        ((Announcement.target_audience == "specific_agency") & (Announcement.target_agency_id == tid))
+    ).order_by(Announcement.created_at.desc()).all()
+    return [{
+        "id": str(a.id), "title": a.title, "message": a.message,
+        "created_at": a.created_at.isoformat() if a.created_at else None,
+    } for a in anns]
+
+
+# ──────────────────────────────────────────────
+# GOOGLE DRIVE BACKUP
+# ──────────────────────────────────────────────
+
+from fastapi.responses import RedirectResponse
+from app.core.config import settings
+
+
+@router.get("/backup/google/connect", dependencies=[Depends(require_role(["admin"]))])
+def gdrive_connect(request: Request):
+    """Redirect admin to Google OAuth consent screen."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="Google Drive integration not configured")
+    from app.services.gdrive_service import get_authorization_url
+    url = get_authorization_url()
+    return {"auth_url": url}
+
+
+@router.get("/backup/google/callback")
+def gdrive_callback(code: str, request: Request, db: Session = Depends(get_db)):
+    """OAuth callback — exchange code for tokens and store refresh token."""
+    from app.services.gdrive_service import exchange_code_for_tokens, encrypt_token
+    tid = request.state.tenant_id
+    if not tid:
+        raise HTTPException(status_code=401, detail="Authentication required")
+
+    tokens = exchange_code_for_tokens(code)
+    if not tokens.get("refresh_token"):
+        raise HTTPException(status_code=400, detail="No refresh token received. Please revoke app access and try again.")
+
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+
+    agency.gdrive_refresh_token = encrypt_token(tokens["refresh_token"])
+    agency.gdrive_connected_at = datetime.utcnow()
+    db.commit()
+
+    # Redirect to frontend backup page with success
+    return RedirectResponse(url="/admin/backup?connected=true")
+
+
+@router.get("/backup/google/status", dependencies=[Depends(require_role(["admin"]))])
+def gdrive_status(request: Request, db: Session = Depends(get_db)):
+    """Check if Google Drive is connected for this agency."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+
+    connected = agency.gdrive_refresh_token is not None
+    return {
+        "connected": connected,
+        "connected_at": agency.gdrive_connected_at.isoformat() if agency.gdrive_connected_at else None,
+        "enabled": bool(settings.GOOGLE_CLIENT_ID),
+    }
+
+
+@router.delete("/backup/google/disconnect", dependencies=[Depends(require_role(["admin"]))])
+def gdrive_disconnect(request: Request, db: Session = Depends(get_db)):
+    """Remove stored Google Drive credentials."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+
+    agency.gdrive_refresh_token = None
+    agency.gdrive_folder_id = None
+    agency.gdrive_connected_at = None
+    db.commit()
+    return {"status": "disconnected"}
+
+
+@router.post("/backup/trigger", dependencies=[Depends(require_role(["admin"]))])
+def trigger_backup(request: Request, db: Session = Depends(get_db)):
+    """Manually trigger a daily backup for this agency."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Google Drive not connected")
+
+    from app.services.excel_export import (
+        generate_daily_stock_excel, generate_daily_deliveries_excel,
+    )
+    from app.services.gdrive_service import upload_file
+
+    target_date = date.today()
+    date_str = target_date.isoformat()
+    results = []
+
+    try:
+        stock_bytes = generate_daily_stock_excel(db, agency.id, target_date)
+        r1 = upload_file(
+            agency.gdrive_refresh_token, agency.name,
+            "Daily Updates", f"{date_str}_daily_stock.xlsx", stock_bytes,
+        )
+        results.append({"file": f"{date_str}_daily_stock.xlsx", "status": "uploaded", **r1})
+    except Exception as e:
+        results.append({"file": "daily_stock.xlsx", "status": "failed", "error": str(e)})
+
+    try:
+        delivery_bytes = generate_daily_deliveries_excel(db, agency.id, target_date)
+        r2 = upload_file(
+            agency.gdrive_refresh_token, agency.name,
+            "Daily Updates", f"{date_str}_deliveries.xlsx", delivery_bytes,
+        )
+        results.append({"file": f"{date_str}_deliveries.xlsx", "status": "uploaded", **r2})
+    except Exception as e:
+        results.append({"file": "deliveries.xlsx", "status": "failed", "error": str(e)})
+
+    return {"date": date_str, "results": results}
+
+
+@router.post("/backup/trigger-monthly", dependencies=[Depends(require_role(["admin"]))])
+def trigger_monthly_backup(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
+    """Manually trigger a monthly backup for this agency."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Google Drive not connected")
+
+    from app.services.excel_export import (
+        generate_monthly_revenue_excel, generate_monthly_subscriptions_excel, generate_monthly_invoices_excel,
+    )
+    from app.services.gdrive_service import upload_file
+
+    today = date.today()
+    if not month:
+        prev = today.replace(day=1) - timedelta(days=1)
+        month, year = prev.month, prev.year
+    if not year:
+        year = today.year
+
+    month_str = f"{year}-{month:02d}"
+    results = []
+
+    for gen_fn, fname in [
+        (generate_monthly_revenue_excel, f"{month_str}_revenue_report.xlsx"),
+        (generate_monthly_subscriptions_excel, f"{month_str}_subscription_summary.xlsx"),
+        (generate_monthly_invoices_excel, f"{month_str}_invoice_report.xlsx"),
+    ]:
+        try:
+            file_bytes = gen_fn(db, agency.id, month, year)
+            r = upload_file(agency.gdrive_refresh_token, agency.name, "Monthly Analysis", fname, file_bytes)
+            results.append({"file": fname, "status": "uploaded", **r})
+        except Exception as e:
+            results.append({"file": fname, "status": "failed", "error": str(e)})
+
+    return {"period": month_str, "results": results}
+
+
+@router.post("/backup/trigger-yearly", dependencies=[Depends(require_role(["admin"]))])
+def trigger_yearly_backup(request: Request, year: int = None, db: Session = Depends(get_db)):
+    """Manually trigger a yearly backup for this agency."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Google Drive not connected")
+
+    from app.services.excel_export import generate_yearly_report_excel
+    from app.services.gdrive_service import upload_file
+
+    if not year:
+        year = date.today().year - 1
+
+    results = []
+    try:
+        yearly_bytes = generate_yearly_report_excel(db, agency.id, year)
+        r = upload_file(
+            agency.gdrive_refresh_token, agency.name,
+            "Yearly Analysis", f"{year}_annual_report.xlsx", yearly_bytes,
+        )
+        results.append({"file": f"{year}_annual_report.xlsx", "status": "uploaded", **r})
+    except Exception as e:
+        results.append({"file": f"{year}_annual_report.xlsx", "status": "failed", "error": str(e)})
+
+    return {"year": year, "results": results}
+
+
+@router.get("/backup/files/{subfolder}", dependencies=[Depends(require_role(["admin"]))])
+def list_backup_files_endpoint(subfolder: str, request: Request, db: Session = Depends(get_db)):
+    """List backup files in a specific subfolder (Daily Updates, Monthly Analysis, Yearly Analysis)."""
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Google Drive not connected")
+
+    folder_map = {
+        "daily": "Daily Updates",
+        "monthly": "Monthly Analysis",
+        "yearly": "Yearly Analysis",
+    }
+    folder_name = folder_map.get(subfolder)
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Invalid subfolder. Use: daily, monthly, yearly")
+
+    from app.services.gdrive_service import list_backup_files
+    files = list_backup_files(agency.gdrive_refresh_token, agency.name, folder_name)
+    return files

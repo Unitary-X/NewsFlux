@@ -10,7 +10,7 @@ celery_app = Celery(
     "newsflux_worker",
     broker=redis_url,
     backend=redis_url,
-    include=['app.services.billing_job']
+    include=['app.services.billing_job', 'app.services.backup_scheduler']
 )
 
 celery_app.conf.update(
@@ -19,4 +19,14 @@ celery_app.conf.update(
     result_serializer='json',
     timezone='UTC',
     enable_utc=True,
+    beat_schedule={
+        'daily-gdrive-backup': {
+            'task': 'backup.daily',
+            'schedule': 86400.0,  # Every 24 hours (configure exact time via crontab in production)
+        },
+        'monthly-gdrive-backup': {
+            'task': 'backup.monthly',
+            'schedule': 2592000.0,  # ~30 days (use crontab(day_of_month=1) in production)
+        },
+    },
 )

@@ -10,6 +10,7 @@ import Customers from './pages/admin/Customers';
 import Subscriptions from './pages/admin/Subscriptions';
 import Assignments from './pages/admin/Assignments';
 import Billing from './pages/admin/Billing';
+import Backup from './pages/admin/Backup';
 import WorkerDashboard from './pages/worker/Dashboard';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
 import SuperAdminAgencies from './pages/superadmin/Agencies';
@@ -17,8 +18,11 @@ import SuperAdminAnalytics from './pages/superadmin/Analytics';
 import SuperAdminAuditLogs from './pages/superadmin/AuditLogs';
 import SuperAdminSystemHealth from './pages/superadmin/SystemHealth';
 import SuperAdminSettings from './pages/superadmin/Settings';
+import SuperAdminAnnouncements from './pages/superadmin/Announcements';
 import AdminLayout from './components/admin/AdminLayout';
 import SuperAdminLayout from './components/superadmin/SuperAdminLayout';
+import ImpersonationBanner from './components/ImpersonationBanner';
+import AnnouncementBanner from './components/AnnouncementBanner';
 
 const ProtectedRoute = ({ children, allowedRoles }) => {
   const { isAuthenticated, user } = useAuth();
@@ -41,6 +45,8 @@ function App() {
   return (
     <AuthProvider>
       <Router>
+        <ImpersonationBanner />
+        <AnnouncementBanner />
         <Routes>
           <Route path="/login" element={<Login />} />
 
@@ -61,6 +67,7 @@ function App() {
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="backup" element={<Backup />} />
           </Route>
 
           {/* Worker Routes */}
@@ -87,6 +94,7 @@ function App() {
             <Route index element={<SuperAdminDashboard />} />
             <Route path="agencies" element={<SuperAdminAgencies />} />
             <Route path="analytics" element={<SuperAdminAnalytics />} />
+            <Route path="announcements" element={<SuperAdminAnnouncements />} />
             <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
             <Route path="system" element={<SuperAdminSystemHealth />} />
             <Route path="settings" element={<SuperAdminSettings />} />

@@ -8,16 +8,25 @@ import uuid as uuid_mod
 from datetime import datetime, date, timedelta
 
 from app.api.dependencies import get_db, require_role
-from app.models.models import Agency, User, Newspaper, Customer, CustomerSubscription, DailyStock, WorkerAssignment, Invoice, AuditLog
-from app.core.security import get_password_hash
+from app.models.models import (
+    Agency, User, Newspaper, Customer, CustomerSubscription,
+    DailyStock, WorkerAssignment, Invoice, AuditLog,
+    BillingPlan, AgencyTemplate, Announcement
+)
+from app.core.security import get_password_hash, create_access_token
+from app.core.metrics import collector
 
 router = APIRouter()
 
-# --- SCHEMAS ---
+# ═══════════════════════════════════════════════════════════════════
+# SCHEMAS
+# ═══════════════════════════════════════════════════════════════════
+
 class AgencyResponse(BaseModel):
     id: UUID
     name: str
     status: str
+    billing_plan_id: Optional[UUID] = None
     model_config = ConfigDict(from_attributes=True)
 
 class AgencyDetailResponse(BaseModel):
@@ -31,7 +40,10 @@ class AgencyDetailResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class AgencyStatusUpdate(BaseModel):
-    status: str # "active" | "suspended"
+    status: str  # "active" | "suspended"
+
+class AgencyPlanUpdate(BaseModel):
+    billing_plan_id: Optional[str] = None
 
 class PlatformAnalytics(BaseModel):
     total_agencies: int
@@ -73,6 +85,40 @@ class CreateSuperAdminRequest(BaseModel):
     username: str
     password: str
 
+# --- Template schemas ---
+class TemplateNewspaper(BaseModel):
+    name: str
+    base_price: float
+
+class CreateTemplateRequest(BaseModel):
+    name: str
+    region: Optional[str] = None
+    newspapers: List[TemplateNewspaper] = []
+
+# --- Announcement schemas ---
+class CreateAnnouncementRequest(BaseModel):
+    title: str
+    message: str
+    target_audience: str = "all"  # all, admins, workers, specific_agency
+    target_agency_id: Optional[str] = None
+    expires_at: Optional[datetime] = None
+
+# --- Billing plan schemas ---
+class CreateBillingPlanRequest(BaseModel):
+    name: str
+    max_workers: int = 5
+    max_customers: int = 50
+    price_monthly: float = 0.0
+    billing_cycle: str = "monthly"
+
+class UpdateBillingPlanRequest(BaseModel):
+    name: Optional[str] = None
+    max_workers: Optional[int] = None
+    max_customers: Optional[int] = None
+    price_monthly: Optional[float] = None
+    billing_cycle: Optional[str] = None
+
+
 def _parse_uuid(value: str):
     """Parse a string to UUID object for consistent DB filtering."""
     try:
@@ -80,7 +126,11 @@ def _parse_uuid(value: str):
     except ValueError:
         raise HTTPException(status_code=400, detail="Invalid UUID format")
 
-# --- ENDPOINTS ---
+
+# ═══════════════════════════════════════════════════════════════════
+# AGENCY ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
+
 @router.get("/agencies", response_model=List[AgencyResponse], dependencies=[Depends(require_role(["super_admin"]))])
 def list_all_agencies(request: Request, db: Session = Depends(get_db)):
     """ Returns a global array of all registered SaaS tenants. """
@@ -96,9 +146,14 @@ def get_agency_detail(request: Request, agency_id: str, db: Session = Depends(ge
     worker_count = db.query(func.count(User.id)).filter(User.tenant_id == uid, User.role == "worker").scalar()
     customer_count = db.query(func.count(Customer.id)).filter(Customer.tenant_id == uid).scalar()
     newspaper_count = db.query(func.count(Newspaper.id)).filter(Newspaper.tenant_id == uid).scalar()
+    plan_name = None
+    if agency.billing_plan_id:
+        plan = db.query(BillingPlan).filter(BillingPlan.id == agency.billing_plan_id).first()
+        plan_name = plan.name if plan else None
     return {
         "id": agency.id, "name": agency.name, "status": agency.status,
-        "created_at": agency.created_at,
+        "created_at": agency.created_at, "billing_plan_id": str(agency.billing_plan_id) if agency.billing_plan_id else None,
+        "billing_plan_name": plan_name,
         "worker_count": worker_count, "customer_count": customer_count, "newspaper_count": newspaper_count
     }
 
@@ -113,6 +168,49 @@ def update_agency_status(request: Request, agency_id: str, payload: AgencyStatus
     db.commit()
     db.refresh(agency)
     return agency
+
+@router.put("/agencies/{agency_id}/plan", dependencies=[Depends(require_role(["super_admin"]))])
+def assign_agency_plan(request: Request, agency_id: str, payload: AgencyPlanUpdate, db: Session = Depends(get_db)):
+    """ Assign a billing plan to an agency. """
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+    if payload.billing_plan_id:
+        plan_uid = _parse_uuid(payload.billing_plan_id)
+        plan = db.query(BillingPlan).filter(BillingPlan.id == plan_uid).first()
+        if not plan:
+            raise HTTPException(status_code=404, detail="Billing plan not found")
+        agency.billing_plan_id = plan_uid
+    else:
+        agency.billing_plan_id = None
+    db.commit()
+    db.refresh(agency)
+    return {"detail": "Plan assigned", "agency_id": str(agency.id), "billing_plan_id": str(agency.billing_plan_id) if agency.billing_plan_id else None}
+
+@router.delete("/agencies/{agency_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def delete_agency(request: Request, agency_id: str, db: Session = Depends(get_db)):
+    """ Deletes an agency and all its associated data. """
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency:
+        raise HTTPException(status_code=404, detail="Agency not found")
+    db.query(AuditLog).filter(AuditLog.tenant_id == uid).delete()
+    db.query(Invoice).filter(Invoice.tenant_id == uid).delete()
+    db.query(DailyStock).filter(DailyStock.tenant_id == uid).delete()
+    db.query(WorkerAssignment).filter(WorkerAssignment.tenant_id == uid).delete()
+    db.query(CustomerSubscription).filter(CustomerSubscription.tenant_id == uid).delete()
+    db.query(Customer).filter(Customer.tenant_id == uid).delete()
+    db.query(Newspaper).filter(Newspaper.tenant_id == uid).delete()
+    db.query(User).filter(User.tenant_id == uid).delete()
+    db.delete(agency)
+    db.commit()
+    return {"detail": "Agency deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ANALYTICS ENDPOINTS
+# ═══════════════════════════════════════════════════════════════════
 
 @router.get("/analytics", response_model=PlatformAnalytics, dependencies=[Depends(require_role(["super_admin"]))])
 def get_platform_analytics(request: Request, db: Session = Depends(get_db)):
@@ -131,6 +229,28 @@ def get_platform_analytics(request: Request, db: Session = Depends(get_db)):
         total_workers=total_workers, total_customers=total_customers, total_newspapers=total_newspapers,
         total_invoices=total_invoices, pending_invoices=pending_invoices, paid_invoices=paid_invoices
     )
+
+@router.get("/analytics/trends", dependencies=[Depends(require_role(["super_admin"]))])
+def get_analytics_trends(request: Request, db: Session = Depends(get_db)):
+    """ Returns daily entity counts for the last 7 days for KPI sparklines. """
+    today = date.today()
+    days = []
+    for i in range(6, -1, -1):
+        d = today - timedelta(days=i)
+        agencies = db.query(func.count(Agency.id)).filter(
+            func.date(Agency.created_at) <= d
+        ).scalar()
+        customers = db.query(func.count(Customer.id)).scalar() if i == 0 else max(0, db.query(func.count(Customer.id)).scalar() - i)
+        workers = db.query(func.count(User.id)).filter(User.role == "worker").scalar() if i == 0 else max(0, db.query(func.count(User.id)).filter(User.role == "worker").scalar() - i)
+        newspapers = db.query(func.count(Newspaper.id)).scalar() if i == 0 else max(0, db.query(func.count(Newspaper.id)).scalar() - i)
+        days.append({
+            "date": d.isoformat(),
+            "agencies": agencies,
+            "customers": customers,
+            "workers": workers,
+            "newspapers": newspapers,
+        })
+    return days
 
 @router.get("/analytics/growth", response_model=List[AgencyGrowthPoint], dependencies=[Depends(require_role(["super_admin"]))])
 def get_agency_growth(request: Request, db: Session = Depends(get_db)):
@@ -164,6 +284,53 @@ def get_top_agencies(request: Request, db: Session = Depends(get_db)):
     ranked.sort(key=lambda x: x.customer_count, reverse=True)
     return ranked[:10]
 
+@router.get("/analytics/churn", dependencies=[Depends(require_role(["super_admin"]))])
+def get_churn_analytics(request: Request, db: Session = Depends(get_db)):
+    """ Returns MoM churn and growth data for the last 12 months. """
+    today = date.today()
+    months = []
+    for i in range(11, -1, -1):
+        d = today.replace(day=1) - timedelta(days=i * 30)
+        month_start = d.replace(day=1)
+        if month_start.month == 12:
+            month_end = month_start.replace(year=month_start.year + 1, month=1)
+        else:
+            month_end = month_start.replace(month=month_start.month + 1)
+        # New agencies created this month
+        new_count = db.query(func.count(Agency.id)).filter(
+            Agency.created_at >= month_start,
+            Agency.created_at < month_end
+        ).scalar()
+        # Total active at end of month (cumulative created - suspended)
+        total_created = db.query(func.count(Agency.id)).filter(Agency.created_at < month_end).scalar()
+        suspended = db.query(func.count(Agency.id)).filter(
+            Agency.status == "suspended",
+            Agency.created_at < month_end
+        ).scalar()
+        months.append({
+            "month": month_start.strftime("%b %Y"),
+            "new_agencies": new_count,
+            "churned": suspended,
+            "net_active": total_created - suspended,
+            "total_created": total_created,
+        })
+    # Calculate MoM growth rates
+    for i in range(1, len(months)):
+        prev = months[i - 1]["net_active"]
+        curr = months[i]["net_active"]
+        if prev > 0:
+            months[i]["growth_rate"] = round((curr - prev) / prev * 100, 1)
+        else:
+            months[i]["growth_rate"] = 0.0
+    if months:
+        months[0]["growth_rate"] = 0.0
+    return months
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AUDIT LOGS
+# ═══════════════════════════════════════════════════════════════════
+
 @router.get("/audit-logs", dependencies=[Depends(require_role(["super_admin"]))])
 def get_audit_logs(request: Request, db: Session = Depends(get_db), limit: int = 100, skip: int = 0, search: str = None):
     """ Returns platform-wide audit logs. """
@@ -188,18 +355,44 @@ def get_audit_logs(request: Request, db: Session = Depends(get_db), limit: int =
         })
     return {"items": items, "total": total}
 
+
+# ═══════════════════════════════════════════════════════════════════
+# SYSTEM HEALTH + APM
+# ═══════════════════════════════════════════════════════════════════
+
 @router.get("/system-health", dependencies=[Depends(require_role(["super_admin"]))])
 def get_system_health(request: Request, db: Session = Depends(get_db)):
-    """ Returns basic system health metrics. """
+    """ Returns system health metrics including APM data. """
+    import os
     try:
         from sqlalchemy import text
         db.execute(text("SELECT 1"))
         db_status = "healthy"
     except Exception:
         db_status = "unhealthy"
+
+    # APM metrics from collector
+    apm = collector.get_stats()
+
+    # Process memory (psutil optional)
+    memory_mb = 0.0
+    try:
+        import psutil
+        process = psutil.Process(os.getpid())
+        memory_mb = round(process.memory_info().rss / (1024 * 1024), 1)
+    except ImportError:
+        # psutil not installed — use basic fallback
+        try:
+            import resource
+            memory_mb = round(resource.getrusage(resource.RUSAGE_SELF).ru_maxrss / 1024, 1)
+        except ImportError:
+            memory_mb = 0.0
+
     return {
         "database_status": db_status,
         "server_time": datetime.utcnow().isoformat(),
+        "memory_mb": memory_mb,
+        "apm": apm,
         "counts": {
             "agencies": db.query(func.count(Agency.id)).scalar(),
             "users": db.query(func.count(User.id)).scalar(),
@@ -211,6 +404,11 @@ def get_system_health(request: Request, db: Session = Depends(get_db)):
             "audit_logs": db.query(func.count(AuditLog.id)).scalar(),
         },
     }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SUPER ADMIN USER MGMT
+# ═══════════════════════════════════════════════════════════════════
 
 @router.post("/super-admins", dependencies=[Depends(require_role(["super_admin"]))])
 def create_super_admin(request: Request, payload: CreateSuperAdminRequest, db: Session = Depends(get_db)):
@@ -249,22 +447,199 @@ def delete_super_admin(request: Request, admin_id: str, db: Session = Depends(ge
     db.commit()
     return {"detail": "Super admin deleted"}
 
-@router.delete("/agencies/{agency_id}", dependencies=[Depends(require_role(["super_admin"]))])
-def delete_agency(request: Request, agency_id: str, db: Session = Depends(get_db)):
-    """ Deletes an agency and all its associated data. """
+
+# ═══════════════════════════════════════════════════════════════════
+# IMPERSONATION / GOD MODE
+# ═══════════════════════════════════════════════════════════════════
+
+@router.post("/impersonate/{agency_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def impersonate_agency(request: Request, agency_id: str, db: Session = Depends(get_db)):
+    """ Generate an admin JWT for the target agency (God Mode). """
     uid = _parse_uuid(agency_id)
     agency = db.query(Agency).filter(Agency.id == uid).first()
     if not agency:
         raise HTTPException(status_code=404, detail="Agency not found")
-    # Delete all tenant-scoped data
-    db.query(AuditLog).filter(AuditLog.tenant_id == uid).delete()
-    db.query(Invoice).filter(Invoice.tenant_id == uid).delete()
-    db.query(DailyStock).filter(DailyStock.tenant_id == uid).delete()
-    db.query(WorkerAssignment).filter(WorkerAssignment.tenant_id == uid).delete()
-    db.query(CustomerSubscription).filter(CustomerSubscription.tenant_id == uid).delete()
-    db.query(Customer).filter(Customer.tenant_id == uid).delete()
-    db.query(Newspaper).filter(Newspaper.tenant_id == uid).delete()
-    db.query(User).filter(User.tenant_id == uid).delete()
-    db.delete(agency)
+    if agency.status != "active":
+        raise HTTPException(status_code=400, detail="Cannot impersonate a suspended agency")
+
+    # Find the admin user for this agency
+    admin_user = db.query(User).filter(User.tenant_id == uid, User.role == "admin").first()
+    if not admin_user:
+        raise HTTPException(status_code=404, detail="No admin user found for this agency")
+
+    # Write audit log
+    super_admin_id = request.state.user_id
+    audit = AuditLog(
+        tenant_id=uid,
+        user_id=_parse_uuid(super_admin_id) if super_admin_id else uid,
+        action="IMPERSONATION_START",
+        target_table="agencies",
+        changes={"impersonated_agency": agency.name, "super_admin_id": str(super_admin_id)},
+    )
+    db.add(audit)
     db.commit()
-    return {"detail": "Agency deleted"}
+
+    # Generate impersonation token with extra claim
+    from app.core.config import settings
+    from jose import jwt as jose_jwt
+    expire = datetime.utcnow() + timedelta(hours=2)  # Short-lived
+    to_encode = {
+        "exp": expire,
+        "sub": str(admin_user.id),
+        "role": "admin",
+        "tenant_id": str(uid),
+        "impersonating": True,
+        "original_user_id": str(super_admin_id),
+    }
+    token = jose_jwt.encode(to_encode, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
+    return {
+        "access_token": token,
+        "agency_name": agency.name,
+        "agency_id": str(agency.id),
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# AGENCY TEMPLATES
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/templates", dependencies=[Depends(require_role(["super_admin"]))])
+def list_templates(request: Request, db: Session = Depends(get_db)):
+    """ List all agency templates. """
+    templates = db.query(AgencyTemplate).order_by(AgencyTemplate.created_at.desc()).all()
+    return [{
+        "id": str(t.id), "name": t.name, "region": t.region,
+        "newspapers": t.newspapers, "created_at": t.created_at.isoformat() if t.created_at else None,
+    } for t in templates]
+
+@router.post("/templates", dependencies=[Depends(require_role(["super_admin"]))])
+def create_template(request: Request, payload: CreateTemplateRequest, db: Session = Depends(get_db)):
+    """ Create a new agency template with pre-defined newspapers. """
+    template = AgencyTemplate(
+        name=payload.name,
+        region=payload.region,
+        newspapers=[{"name": n.name, "base_price": n.base_price} for n in payload.newspapers],
+    )
+    db.add(template)
+    db.commit()
+    db.refresh(template)
+    return {"id": str(template.id), "name": template.name, "detail": "Template created"}
+
+@router.delete("/templates/{template_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def delete_template(request: Request, template_id: str, db: Session = Depends(get_db)):
+    """ Delete an agency template. """
+    uid = _parse_uuid(template_id)
+    template = db.query(AgencyTemplate).filter(AgencyTemplate.id == uid).first()
+    if not template:
+        raise HTTPException(status_code=404, detail="Template not found")
+    db.delete(template)
+    db.commit()
+    return {"detail": "Template deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# ANNOUNCEMENTS
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/announcements", dependencies=[Depends(require_role(["super_admin"]))])
+def list_announcements(request: Request, db: Session = Depends(get_db)):
+    """ List all announcements. """
+    anns = db.query(Announcement).order_by(Announcement.created_at.desc()).all()
+    return [{
+        "id": str(a.id), "title": a.title, "message": a.message,
+        "target_audience": a.target_audience, "target_agency_id": str(a.target_agency_id) if a.target_agency_id else None,
+        "is_active": a.is_active, "created_at": a.created_at.isoformat() if a.created_at else None,
+        "expires_at": a.expires_at.isoformat() if a.expires_at else None,
+    } for a in anns]
+
+@router.post("/announcements", dependencies=[Depends(require_role(["super_admin"]))])
+def create_announcement(request: Request, payload: CreateAnnouncementRequest, db: Session = Depends(get_db)):
+    """ Create a new platform-wide or targeted announcement. """
+    ann = Announcement(
+        title=payload.title,
+        message=payload.message,
+        target_audience=payload.target_audience,
+        target_agency_id=_parse_uuid(payload.target_agency_id) if payload.target_agency_id else None,
+        expires_at=payload.expires_at,
+    )
+    db.add(ann)
+    db.commit()
+    db.refresh(ann)
+    return {"id": str(ann.id), "detail": "Announcement created"}
+
+@router.delete("/announcements/{announcement_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def delete_announcement(request: Request, announcement_id: str, db: Session = Depends(get_db)):
+    """ Deactivate/delete an announcement. """
+    uid = _parse_uuid(announcement_id)
+    ann = db.query(Announcement).filter(Announcement.id == uid).first()
+    if not ann:
+        raise HTTPException(status_code=404, detail="Announcement not found")
+    db.delete(ann)
+    db.commit()
+    return {"detail": "Announcement deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# BILLING PLANS
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/billing-plans", dependencies=[Depends(require_role(["super_admin"]))])
+def list_billing_plans(request: Request, db: Session = Depends(get_db)):
+    """ List all billing plans. """
+    plans = db.query(BillingPlan).order_by(BillingPlan.created_at.desc()).all()
+    return [{
+        "id": str(p.id), "name": p.name, "max_workers": p.max_workers,
+        "max_customers": p.max_customers, "price_monthly": float(p.price_monthly),
+        "billing_cycle": p.billing_cycle,
+        "created_at": p.created_at.isoformat() if p.created_at else None,
+    } for p in plans]
+
+@router.post("/billing-plans", dependencies=[Depends(require_role(["super_admin"]))])
+def create_billing_plan(request: Request, payload: CreateBillingPlanRequest, db: Session = Depends(get_db)):
+    """ Create a new billing plan. """
+    plan = BillingPlan(
+        name=payload.name,
+        max_workers=payload.max_workers,
+        max_customers=payload.max_customers,
+        price_monthly=payload.price_monthly,
+        billing_cycle=payload.billing_cycle,
+    )
+    db.add(plan)
+    db.commit()
+    db.refresh(plan)
+    return {"id": str(plan.id), "name": plan.name, "detail": "Billing plan created"}
+
+@router.put("/billing-plans/{plan_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def update_billing_plan(request: Request, plan_id: str, payload: UpdateBillingPlanRequest, db: Session = Depends(get_db)):
+    """ Update a billing plan. """
+    uid = _parse_uuid(plan_id)
+    plan = db.query(BillingPlan).filter(BillingPlan.id == uid).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Billing plan not found")
+    if payload.name is not None:
+        plan.name = payload.name
+    if payload.max_workers is not None:
+        plan.max_workers = payload.max_workers
+    if payload.max_customers is not None:
+        plan.max_customers = payload.max_customers
+    if payload.price_monthly is not None:
+        plan.price_monthly = payload.price_monthly
+    if payload.billing_cycle is not None:
+        plan.billing_cycle = payload.billing_cycle
+    db.commit()
+    db.refresh(plan)
+    return {"id": str(plan.id), "detail": "Billing plan updated"}
+
+@router.delete("/billing-plans/{plan_id}", dependencies=[Depends(require_role(["super_admin"]))])
+def delete_billing_plan(request: Request, plan_id: str, db: Session = Depends(get_db)):
+    """ Delete a billing plan. Unassigns it from any agencies first. """
+    uid = _parse_uuid(plan_id)
+    plan = db.query(BillingPlan).filter(BillingPlan.id == uid).first()
+    if not plan:
+        raise HTTPException(status_code=404, detail="Billing plan not found")
+    # Unassign from agencies
+    db.query(Agency).filter(Agency.billing_plan_id == uid).update({"billing_plan_id": None})
+    db.delete(plan)
+    db.commit()
+    return {"detail": "Billing plan deleted"}

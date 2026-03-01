@@ -3,17 +3,24 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse
 from jose import jwt, JWTError
 from app.core.config import settings
+from app.core.metrics import collector
 import logging
 import uuid
+import time
 
 logger = logging.getLogger(__name__)
 
 class TenantMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
+        start_time = time.time()
+
         # Allow open routes like login and docs
         open_routes = ["/health", "/api/v1/auth/login", "/api/v1/auth/register", "/docs", "/openapi.json"]
         if request.url.path in open_routes:
-            return await call_next(request)
+            response = await call_next(request)
+            latency_ms = (time.time() - start_time) * 1000
+            collector.record(latency_ms, response.status_code, request.url.path)
+            return response
 
         auth_header = request.headers.get("Authorization")
         
@@ -42,10 +49,11 @@ class TenantMiddleware(BaseHTTPMiddleware):
         except JWTError:
             return JSONResponse(status_code=401, content={"detail": "Invalid or expired token"})
             
-        # Optional: You can add an enforcement layer here. 
-        # If the route isn't meant for Super Admins, ensure tenant_id exists.
-        if not tenant_id and role != "super_admin":
+        # Enforce tenant isolation for non-super-admin roles
+        if not request.state.tenant_id and role != "super_admin":
              return JSONResponse(status_code=403, content={"detail": "Data bleeding prevented. Valid Tenant ID required for this sub-role."})
 
         response = await call_next(request)
+        latency_ms = (time.time() - start_time) * 1000
+        collector.record(latency_ms, response.status_code, request.url.path)
         return response

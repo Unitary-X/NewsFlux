@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Computed, Uuid
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Computed, Uuid, Boolean, Text
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -10,6 +10,10 @@ class Agency(Base):
     name = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     status = Column(String(50), default="active") # active, suspended
+    billing_plan_id = Column(Uuid, ForeignKey("billing_plans.id"), nullable=True)
+    gdrive_refresh_token = Column(Text, nullable=True)       # Encrypted OAuth refresh token
+    gdrive_folder_id = Column(String(255), nullable=True)     # Root backup folder ID in admin's Drive
+    gdrive_connected_at = Column(DateTime, nullable=True)     # When Drive was connected
 
 class User(Base):
     __tablename__ = "users"
@@ -82,3 +86,32 @@ class AuditLog(Base):
     target_table = Column(String(50), nullable=False)
     changes = Column(JSON, nullable=True)
     timestamp = Column(DateTime, default=datetime.utcnow)
+
+class BillingPlan(Base):
+    __tablename__ = "billing_plans"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)          # e.g. "Basic", "Pro", "Enterprise"
+    max_workers = Column(Integer, default=5)
+    max_customers = Column(Integer, default=50)
+    price_monthly = Column(DECIMAL(10, 2), default=0.00)
+    billing_cycle = Column(String(20), default="monthly") # monthly, yearly
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class AgencyTemplate(Base):
+    __tablename__ = "agency_templates"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    name = Column(String(100), nullable=False)          # e.g. "South India Standard"
+    region = Column(String(100), nullable=True)
+    newspapers = Column(JSON, nullable=False, default=[]) # [{name, base_price}, ...]
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class Announcement(Base):
+    __tablename__ = "announcements"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    target_audience = Column(String(50), default="all")   # all, admins, workers, specific_agency
+    target_agency_id = Column(Uuid, ForeignKey("agencies.id"), nullable=True)
+    is_active = Column(Boolean, default=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    expires_at = Column(DateTime, nullable=True)

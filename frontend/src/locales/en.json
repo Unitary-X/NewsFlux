@@ -18,6 +18,7 @@
         "subscriptions": "Subscriptions",
         "assignments": "Assignments",
         "billing": "Billing",
+        "backup": "Backup",
         "agency_menu": "Agency Menu",
         "sign_out": "Sign Out",
         "agency_id": "Agency ID"
@@ -104,5 +105,30 @@
     },
     "language": "Language",
     "tamil": "Tamil",
-    "english": "English"
+    "english": "English",
+    "backup": {
+        "title": "Google Drive Backup",
+        "subtitle": "Auto-backup your agency data to Google Drive as Excel reports",
+        "connection": "Google Drive Connection",
+        "not_configured": "Google Drive integration is not configured. Contact your administrator to enable it.",
+        "connected": "Google Drive Connected",
+        "connected_since": "Connected since",
+        "not_connected": "Google Drive is not connected",
+        "connect_btn": "Connect Google Drive",
+        "disconnect": "Disconnect Google Drive",
+        "disconnect_confirm": "Disconnect Google Drive? Automatic backups will stop.",
+        "daily": "Daily Updates",
+        "daily_desc": "Stock summary and delivery reports for today",
+        "monthly": "Monthly Analysis",
+        "monthly_desc": "Revenue, subscriptions and invoice reports",
+        "yearly": "Yearly Analysis",
+        "yearly_desc": "Annual report with revenue and growth trends",
+        "run_now": "Run Now",
+        "running": "Running...",
+        "results": "Backup Results",
+        "history": "Backup History",
+        "refresh": "Refresh",
+        "open": "Open",
+        "no_files": "No backup files yet"
+    }
 }
