@@ -35,3 +35,10 @@ dist-ssr/
 # Logs
 *.log
 npm-debug.log*
+
+# Binary docs & images (keep docs as .md only)
+*.pdf
+*.docx
+*.png
+*.jpg
+*.jpeg

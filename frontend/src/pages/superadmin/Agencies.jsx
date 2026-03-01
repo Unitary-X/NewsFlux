@@ -42,7 +42,7 @@ export default function Agencies() {
         setCreating(true);
         setError('');
         try {
-            await api.post('/api/v1/auth/register', {
+            await api.post('/auth/register', {
                 agency_name: form.agency_name,
                 admin_username: form.admin_username,
                 admin_password: form.admin_password,
