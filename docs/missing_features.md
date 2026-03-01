@@ -10,66 +10,59 @@ Audit date: March 1, 2026
 - [x] Agency list (view all tenants)
 - [x] Create new agency + admin account
 - [x] Suspend / Reactivate agency
+- [x] **Sidebar navigation** — Full sidebar with Home, Agencies, Analytics, Audit Logs, System Health, Settings
+- [x] **Analytics sub-page** — Platform analytics page with charts
+- [x] **KPI Cards** — Dashboard cards for Total Agencies, Active/Suspended counts
+- [x] **Audit Logs viewer** — API endpoint + UI for viewing audit logs
+- [x] **System Health page** — System monitoring page
+- [x] **Settings page** — Configuration UI
 
 ### Missing
-- [ ] **Sidebar navigation** — Mockup shows full sidebar (Home, Dashboard, Agencies, Workers, Customers, Billing, System Logs, Settings) — current page has no sidebar
-- [ ] **Analytics sub-pages** — Sales Overview, Top Products, Stock Status pages not built
-- [ ] **KPI Cards with sparklines** — Mockup shows 4 cards (Total Agencies, Daily Newspapers, Monthly Revenue, System Load) with trend graphs — only basic count cards exist
+- [ ] **KPI sparklines** — Trend graphs on KPI cards not yet implemented
 - [ ] **Agency Growth bar chart** — Monthly growth visualization (from mockup)
 - [ ] **Top Performing agencies leaderboard** — Ranked progress bars per agency
 - [ ] **System Activity doughnut chart** — System load ring visualization
-- [ ] **System Activity Log** — Searchable activity/audit log table
 - [ ] **Server Monitoring / APM metrics** — P99 latency, error rates, DB health
 - [ ] **Impersonation / God Mode** — "Log in as Admin" button to debug agency issues
 - [ ] **Master Agency Templates** — Region-based newspaper pre-seeding on agency creation
 - [ ] **Global Broadcast / Announcements** — Platform-wide notification system
 - [ ] **SaaS Billing Engine** — Tiered plans, Stripe/Razorpay integration, auto-suspension
-- [ ] **Audit Logs viewer** — DB model exists but no API endpoint or UI
 - [ ] **Platform Churn & Growth Analytics** — MoM growth, churn rate tracking
-- [ ] **Settings page** — No configuration UI
 
 ---
 
 ## 🏢 Admin (`/admin/*`)
 
 ### Implemented
-- [x] Newspaper — Create + List
-- [x] Worker — Create + List
-- [x] Customer — Create + List
+- [x] Newspaper — Create + List + Edit + Delete
+- [x] Worker — Create + List + Edit (username + password reset) + Delete
+- [x] Customer — Create + List + Edit + Delete
 - [x] Daily Stock entry (Taken / Returned per newspaper per date)
-- [x] Sidebar navigation with links
+- [x] Sidebar navigation with links (incl. Subscriptions, Assignments, Billing)
+- [x] **Dashboard overview** — KPI cards (Newspapers, Workers, Customers, Today's Revenue, Monthly Revenue) + 14-day revenue area chart + stock bar chart + revenue breakdown table
+- [x] **Daily Revenue calculation** — `Sold × Price` computed in dashboard stats and stock summary
+- [x] **Charts / Visualizations** — recharts AreaChart (revenue trend) + BarChart (stock summary)
+- [x] **Billing page** — Generate monthly invoices, view invoice list, filter by status
+- [x] **Payment tracking (Paid / Unpaid)** — Mark invoices as paid, filter pending/paid
+- [x] **Delivery Fee configuration** — Set delivery fee per billing generation cycle
+- [x] **Customer Subscriptions management** — Full CRUD: assign newspapers to customers with quantity & custom pricing, status toggle (Active/Paused)
+- [x] **Worker Route Assignments** — Assign customers to workers with route ordering, grouped-by-worker display
+- [x] **Search / Filter in tables** — All entity tables (Newspapers, Workers, Customers, Subscriptions, Assignments, Billing) have search/filter
 
 ### Missing — Analytics & Reports
-- [ ] **Dashboard overview** — Currently an empty placeholder page (just shows "Admin Dashboard" + logout)
-- [ ] **Daily Revenue calculation** — `Sold × Price` not computed or displayed anywhere
 - [ ] **Profit / Loss dashboard** — Specified in docs, not built
 - [ ] **Stock Reconciliation reports** — Specified in docs, not built
 - [ ] **Worker Performance tracking** — No metrics on individual worker output
-- [ ] **Charts / Visualizations** — No graphs anywhere in admin pages
 - [ ] **Daily / Weekly / Monthly report views** — Specified in docs, not built
 
 ### Missing — Billing & Finance
-- [ ] **Billing page (generate / view invoices)** — Backend Celery task exists but no API endpoint or frontend UI to trigger or view it
-- [ ] **Payment tracking (Paid / Unpaid)** — Invoice model has `status` field but no UI
-- [ ] **Delivery Fee configuration** — Invoice model has `delivery_fee` field but no way to set it per agency
 - [ ] **Salary management** — Specified in docs — no model, API, or UI for worker compensation
 
-### Missing — CRUD Operations
-- [ ] **Edit newspaper** — Can only create, not update name or price
-- [ ] **Delete newspaper** — No delete functionality
-- [ ] **Edit worker** — Can only create, not update username or reset password
-- [ ] **Delete worker** — No delete functionality
-- [ ] **Edit customer** — Can only create, not update details
-- [ ] **Delete customer** — No delete functionality
-
 ### Missing — Subscriptions & Assignments
-- [ ] **Customer Subscriptions management** — DB model (`customer_subscriptions`) exists but no admin UI to assign newspapers to customers
 - [ ] **Customer Types** — Docs specify Daily / Weekly / Monthly / Yearly — not implemented
-- [ ] **Worker Route Assignments** — `worker_assignments` table exists but no admin UI to assign customers to specific workers
-- [ ] **Pricing grids per agency** — Only `base_price` on newspaper — no custom pricing per customer
+- [ ] **Pricing grids per agency** — Custom pricing per customer subscription exists, but no bulk pricing grid UI
 
 ### Missing — UX
-- [ ] **Search / Filter in tables** — All tables show all records with no search
 - [ ] **Pagination** — All data loaded at once
 - [ ] **Sorting** — No column sorting in tables
 - [ ] **Bulk actions** — No multi-select operations
@@ -118,21 +111,21 @@ Audit date: March 1, 2026
 
 ## 📊 Priority Recommendations
 
-### High Priority (Core Business Value)
-1. Admin Analytics Dashboard — Revenue, sales, stock charts
-2. Customer Subscriptions UI — Assign newspapers to customers
-3. Worker Route Assignments UI — Assign customers to workers
-4. Billing / Invoice generation & viewing
-5. Edit / Delete on all entities (newspapers, workers, customers)
+### ~~High Priority (Core Business Value)~~ ✅ DONE
+1. ~~Admin Analytics Dashboard — Revenue, sales, stock charts~~ ✅
+2. ~~Customer Subscriptions UI — Assign newspapers to customers~~ ✅
+3. ~~Worker Route Assignments UI — Assign customers to workers~~ ✅
+4. ~~Billing / Invoice generation & viewing~~ ✅
+5. ~~Edit / Delete on all entities (newspapers, workers, customers)~~ ✅
 
-### Medium Priority (Super Admin Completeness)
-6. Super Admin sidebar + full dashboard with charts
-7. Super Admin analytics (KPI cards, Agency Growth chart, System Activity)
-8. Audit log viewer
+### Medium Priority (Super Admin Completeness) — Partially Done
+6. ~~Super Admin sidebar + full dashboard with charts~~ ✅
+7. Super Admin analytics (KPI sparklines, Agency Growth chart, System Activity)
+8. ~~Audit log viewer~~ ✅
 9. Impersonation mode
 
-### Lower Priority (Polish & Scale)
-10. Search / Filter / Pagination in all tables
+### Lower Priority (Polish & Scale) — Partially Done
+10. ~~Search / Filter in all tables~~ ✅ (Pagination still missing)
 11. i18n across all pages
 12. Salary management
 13. PWA service worker
