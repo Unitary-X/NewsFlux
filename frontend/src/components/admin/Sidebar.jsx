@@ -1,17 +1,23 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings } from 'lucide-react';
+import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
+import { useTranslation } from 'react-i18next';
 
 export default function Sidebar() {
     const { logout, user } = useAuth();
+    const { t, i18n } = useTranslation();
+
+    const toggleLanguage = () => {
+        i18n.changeLanguage(i18n.language === 'en' ? 'ta' : 'en');
+    };
 
     const links = [
-        { to: ".", label: "Overview", icon: LayoutDashboard },
-        { to: "stock", label: "Daily Stock", icon: FileSpreadsheet },
-        { to: "newspapers", label: "Newspapers", icon: Newspaper },
-        { to: "workers", label: "Workers", icon: UserSquare2 },
-        { to: "customers", label: "Customers", icon: Users },
+        { to: "/admin", label: t('sidebar.overview'), icon: LayoutDashboard, end: true },
+        { to: "/admin/stock", label: t('sidebar.daily_stock'), icon: FileSpreadsheet },
+        { to: "/admin/newspapers", label: t('sidebar.newspapers'), icon: Newspaper },
+        { to: "/admin/workers", label: t('sidebar.workers'), icon: UserSquare2 },
+        { to: "/admin/customers", label: t('sidebar.customers'), icon: Users },
     ];
 
     return (
@@ -24,13 +30,13 @@ export default function Sidebar() {
             </div>
 
             <div className="p-4 flex-1">
-                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">Agency Menu</p>
+                <p className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 px-2">{t('sidebar.agency_menu')}</p>
                 <nav className="space-y-1">
                     {links.map((link) => (
                         <NavLink
                             key={link.to}
                             to={link.to}
-                            end={link.to === '.'}
+                            end={link.end || false}
                             className={({ isActive }) =>
                                 `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors font-medium text-sm ${isActive ? 'bg-blue-600/10 text-blue-400' : 'hover:bg-slate-800 hover:text-white'
                                 }`
@@ -44,16 +50,23 @@ export default function Sidebar() {
             </div>
 
             <div className="p-4 border-t border-slate-800 space-y-2">
+                <button
+                    onClick={toggleLanguage}
+                    className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-400 hover:text-blue-400 hover:bg-blue-500/10 rounded-lg transition-colors"
+                >
+                    <Globe className="w-4 h-4" />
+                    {i18n.language === 'en' ? 'தமிழ்' : 'English'}
+                </button>
                 <div className="px-3 py-2 flex items-center gap-3 text-sm text-slate-500">
                     <Settings className="w-4 h-4" />
-                    <span>Agency ID: {user?.tenant_id ? user.tenant_id.substring(0, 8) : '...'}</span>
+                    <span>{t('sidebar.agency_id')}: {user?.tenant_id ? user.tenant_id.substring(0, 8) : '...'}</span>
                 </div>
                 <button
                     onClick={logout}
                     className="w-full flex items-center gap-3 px-3 py-2 text-sm font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors"
                 >
                     <LogOut className="w-4 h-4" />
-                    Sign Out
+                    {t('sidebar.sign_out')}
                 </button>
             </div>
         </div>
