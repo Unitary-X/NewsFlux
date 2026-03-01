@@ -150,3 +150,4 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 18. Stripe/Razorpay payment integration for SaaS billing
 19. Worker route-ordered delivery view
 20. Error boundaries + form validation polish
+21. **Daily Google Drive Backup** — Per-agency Excel export to Google Drive with 3 folders: Daily Updates, Monthly Analysis, Yearly Analysis (see [gdrive_backup.md](gdrive_backup.md))
