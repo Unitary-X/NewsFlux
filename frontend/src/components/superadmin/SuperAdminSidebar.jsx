@@ -1,26 +1,20 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Building2, BarChart3, ScrollText, Activity, Settings, LogOut, ShieldAlert, Globe, Megaphone, HardDrive } from 'lucide-react';
+import { LayoutDashboard, Building2, BarChart3, ScrollText, Activity, Settings, LogOut, ShieldAlert, Megaphone, HardDrive } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
-import { useTranslation } from 'react-i18next';
 
 export default function SuperAdminSidebar() {
     const { logout } = useAuth();
-    const { t, i18n } = useTranslation();
-
-    const toggleLanguage = () => {
-        i18n.changeLanguage(i18n.language === 'en' ? 'ta' : 'en');
-    };
 
     const links = [
-        { to: "/superadmin", label: t('superadmin.dashboard'), icon: LayoutDashboard, end: true },
-        { to: "/superadmin/agencies", label: t('superadmin.agencies'), icon: Building2 },
-        { to: "/superadmin/analytics", label: t('superadmin.analytics'), icon: BarChart3 },
+        { to: "/superadmin", label: "Dashboard", icon: LayoutDashboard, end: true },
+        { to: "/superadmin/agencies", label: "Agencies", icon: Building2 },
+        { to: "/superadmin/analytics", label: "Analytics", icon: BarChart3 },
         { to: "/superadmin/announcements", label: "Announcements", icon: Megaphone },
-        { to: "/superadmin/audit-logs", label: t('superadmin.audit_logs'), icon: ScrollText },
-        { to: "/superadmin/system", label: t('superadmin.system_health'), icon: Activity },
-        { to: "/superadmin/backup", label: t('superadmin.backup'), icon: HardDrive },
-        { to: "/superadmin/settings", label: t('superadmin.settings'), icon: Settings },
+        { to: "/superadmin/audit-logs", label: "Audit Logs", icon: ScrollText },
+        { to: "/superadmin/system", label: "System Health", icon: Activity },
+        { to: "/superadmin/backup", label: "Backup", icon: HardDrive },
+        { to: "/superadmin/settings", label: "Settings", icon: Settings },
     ];
 
     return (
@@ -32,7 +26,7 @@ export default function SuperAdminSidebar() {
                 </div>
                 <div>
                     <h1 className="text-base font-bold text-white tracking-tight">NewsFlux</h1>
-                    <p className="text-[10px] font-mono text-indigo-400 tracking-widest uppercase">{t('superadmin.god_mode')}</p>
+                    <p className="text-[10px] font-mono text-indigo-400 tracking-widest uppercase">God Mode</p>
                 </div>
             </div>
 
@@ -62,18 +56,11 @@ export default function SuperAdminSidebar() {
             {/* Footer */}
             <div className="p-3 border-t border-slate-800/50 space-y-1">
                 <button
-                    onClick={toggleLanguage}
-                    className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-500 hover:text-blue-400 hover:bg-blue-500/10 rounded-xl transition-colors"
-                >
-                    <Globe className="w-4 h-4" />
-                    {i18n.language === 'en' ? 'தமிழ்' : 'English'}
-                </button>
-                <button
                     onClick={logout}
                     className="w-full flex items-center gap-3 px-3 py-2.5 text-sm font-medium text-slate-500 hover:text-red-400 hover:bg-red-500/10 rounded-xl transition-colors"
                 >
                     <LogOut className="w-4 h-4" />
-                    {t('superadmin.terminate_session')}
+                    Terminate Session
                 </button>
             </div>
         </div>

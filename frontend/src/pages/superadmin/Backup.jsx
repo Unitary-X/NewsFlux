@@ -1,10 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../utils/api';
-import { useTranslation } from 'react-i18next';
 import { HardDrive, Cloud, CloudOff, RefreshCw, Loader2, FileSpreadsheet, Calendar, TrendingUp, Search, Building2, ChevronDown, ChevronUp, ExternalLink, Database, Download, FileJson, FileCode } from 'lucide-react';
 
 export default function SuperAdminBackup() {
-    const { t } = useTranslation();
     const [agencies, setAgencies] = useState([]);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState('');
@@ -125,23 +123,23 @@ export default function SuperAdminBackup() {
             <div>
                 <h1 className="text-2xl font-bold text-slate-100 flex items-center gap-3">
                     <HardDrive className="w-7 h-7 text-blue-400" />
-                    {t('sa_backup.title')}
+                    Agency Backups
                 </h1>
-                <p className="text-slate-400 mt-1">{t('sa_backup.subtitle')}</p>
+                <p className="text-slate-400 mt-1">Monitor and trigger Google Drive backups for all agencies</p>
             </div>
 
             {/* Stats */}
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">{t('sa_backup.total_agencies')}</p>
+                    <p className="text-sm text-slate-400">Total Agencies</p>
                     <p className="text-2xl font-bold text-white mt-1">{agencies.length}</p>
                 </div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">{t('sa_backup.connected')}</p>
+                    <p className="text-sm text-slate-400">Drive Connected</p>
                     <p className="text-2xl font-bold text-emerald-400 mt-1">{connectedCount}</p>
                 </div>
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
-                    <p className="text-sm text-slate-400">{t('sa_backup.not_connected')}</p>
+                    <p className="text-sm text-slate-400">Not Connected</p>
                     <p className="text-2xl font-bold text-slate-500 mt-1">{agencies.length - connectedCount}</p>
                 </div>
             </div>
@@ -152,13 +150,13 @@ export default function SuperAdminBackup() {
                     <div>
                         <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
                             <Database className="w-5 h-5 text-indigo-400" />
-                            {t('sa_backup.db_title')}
+                            Database Backup
                         </h2>
-                        <p className="text-sm text-slate-400 mt-0.5">{t('sa_backup.db_subtitle')}</p>
+                        <p className="text-sm text-slate-400 mt-0.5">Export the entire platform database as JSON or SQL dump</p>
                     </div>
                     {dbStats && (
                         <span className="text-sm text-slate-400">
-                            {t('sa_backup.db_total_rows')}: <span className="font-bold text-white">{dbStats.total_rows.toLocaleString()}</span>
+                            Total rows: <span className="font-bold text-white">{dbStats.total_rows.toLocaleString()}</span>
                         </span>
                     )}
                 </div>
@@ -183,9 +181,9 @@ export default function SuperAdminBackup() {
                         className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-sm font-medium hover:bg-indigo-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
                     >
                         {dbExporting === 'json' ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('sa_backup.db_exporting')}</>
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Exporting…</>
                         ) : (
-                            <><FileJson className="w-4 h-4" /> {t('sa_backup.db_export_json')}</>
+                            <><FileJson className="w-4 h-4" /> Export JSON</>
                         )}
                     </button>
                     <button
@@ -194,9 +192,9 @@ export default function SuperAdminBackup() {
                         className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
                     >
                         {dbExporting === 'sql' ? (
-                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('sa_backup.db_exporting')}</>
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Exporting…</>
                         ) : (
-                            <><FileCode className="w-4 h-4" /> {t('sa_backup.db_export_sql')}</>
+                            <><FileCode className="w-4 h-4" /> Export SQL (pg_dump)</>
                         )}
                     </button>
                 </div>
@@ -208,7 +206,7 @@ export default function SuperAdminBackup() {
                 <input
                     value={search}
                     onChange={e => setSearch(e.target.value)}
-                    placeholder={t('sa_backup.search_placeholder')}
+                    placeholder="Search agencies..."
                     className="w-full pl-10 pr-4 py-2.5 bg-slate-800/50 border border-slate-700 rounded-xl text-sm text-slate-200 placeholder-slate-500 focus:ring-2 focus:ring-indigo-500 outline-none"
                 />
             </div>
@@ -217,7 +215,7 @@ export default function SuperAdminBackup() {
             <div className="space-y-3">
                 {filtered.length === 0 ? (
                     <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-12 text-center text-slate-500">
-                        {t('sa_backup.no_agencies')}
+                        No agencies found.
                     </div>
                 ) : (
                     filtered.map(agency => (
@@ -244,8 +242,8 @@ export default function SuperAdminBackup() {
                                         </h3>
                                         <p className="text-xs text-slate-500 mt-0.5">
                                             {agency.gdrive_connected
-                                                ? `${t('sa_backup.connected_since')} ${new Date(agency.gdrive_connected_at).toLocaleDateString()}`
-                                                : t('sa_backup.drive_not_linked')
+                                                ? `Connected since ${new Date(agency.gdrive_connected_at).toLocaleDateString()}`
+                                                : 'Google Drive not linked by admin'
                                             }
                                         </p>
                                     </div>
@@ -270,9 +268,9 @@ export default function SuperAdminBackup() {
                                     {/* Backup Action Cards */}
                                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                         {[
-                                            { type: 'daily', icon: FileSpreadsheet, color: 'blue', label: t('backup.daily'), desc: t('backup.daily_desc') },
-                                            { type: 'monthly', icon: Calendar, color: 'purple', label: t('backup.monthly'), desc: t('backup.monthly_desc') },
-                                            { type: 'yearly', icon: TrendingUp, color: 'amber', label: t('backup.yearly'), desc: t('backup.yearly_desc') },
+                                            { type: 'daily', icon: FileSpreadsheet, color: 'blue', label: 'Daily Updates', desc: 'Stock summary and delivery reports for today' },
+                                            { type: 'monthly', icon: Calendar, color: 'purple', label: 'Monthly Analysis', desc: 'Revenue, subscriptions and invoice reports' },
+                                            { type: 'yearly', icon: TrendingUp, color: 'amber', label: 'Yearly Analysis', desc: 'Annual report with revenue and growth trends' },
                                         ].map(({ type, icon: Icon, color, label, desc }) => {
                                             const loadKey = `${agency.id}-${type}`;
                                             return (
@@ -292,9 +290,9 @@ export default function SuperAdminBackup() {
                                                         }`}
                                                     >
                                                         {triggerLoading === loadKey ? (
-                                                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> {t('backup.running')}</>
+                                                            <><Loader2 className="w-3.5 h-3.5 animate-spin" /> Running...</>
                                                         ) : (
-                                                            <><RefreshCw className="w-3.5 h-3.5" /> {t('backup.run_now')}</>
+                                                            <><RefreshCw className="w-3.5 h-3.5" /> Run Now</>
                                                         )}
                                                     </button>
                                                 </div>
@@ -305,7 +303,7 @@ export default function SuperAdminBackup() {
                                     {/* Results */}
                                     {results && (
                                         <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-4">
-                                            <h4 className="font-semibold text-slate-200 text-sm mb-3">{t('backup.results')}</h4>
+                                            <h4 className="font-semibold text-slate-200 text-sm mb-3">Backup Results</h4>
                                             {results.error ? (
                                                 <p className="text-red-400 text-sm">{results.error}</p>
                                             ) : (
@@ -326,24 +324,24 @@ export default function SuperAdminBackup() {
                                     {/* File History */}
                                     <div className="bg-slate-900/50 border border-slate-700/50 rounded-xl p-4">
                                         <div className="flex items-center justify-between mb-3">
-                                            <h4 className="font-semibold text-slate-200 text-sm">{t('backup.history')}</h4>
+                                            <h4 className="font-semibold text-slate-200 text-sm">Backup History</h4>
                                             <button
                                                 onClick={() => fetchFiles(agency.id)}
                                                 disabled={filesLoading}
                                                 className="text-xs text-blue-400 hover:text-blue-300 flex items-center gap-1"
                                             >
                                                 <RefreshCw className={`w-3 h-3 ${filesLoading ? 'animate-spin' : ''}`} />
-                                                {t('backup.refresh')}
+                                                Refresh
                                             </button>
                                         </div>
 
                                         {['daily', 'monthly', 'yearly'].map(cat => (
                                             <div key={cat} className="mb-3 last:mb-0">
                                                 <h5 className="text-[10px] font-medium text-slate-500 uppercase tracking-wider mb-1.5">
-                                                    {cat === 'daily' ? t('backup.daily') : cat === 'monthly' ? t('backup.monthly') : t('backup.yearly')}
+                                                    {cat === 'daily' ? 'Daily Updates' : cat === 'monthly' ? 'Monthly Analysis' : 'Yearly Analysis'}
                                                 </h5>
                                                 {files[cat].length === 0 ? (
-                                                    <p className="text-xs text-slate-600 italic">{t('sa_backup.no_files')}</p>
+                                                    <p className="text-xs text-slate-600 italic">No files yet</p>
                                                 ) : (
                                                     <div className="space-y-1">
                                                         {files[cat].slice(0, 5).map((f, i) => (
