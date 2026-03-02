@@ -194,7 +194,7 @@ export default function SuperAdminBackup() {
                         {dbExporting === 'sql' ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Exporting…</>
                         ) : (
-                            <><FileCode className="w-4 h-4" /> Export SQL (pg_dump)</>
+                            <><FileCode className="w-4 h-4" /> Export SQL</>
                         )}
                     </button>
                 </div>

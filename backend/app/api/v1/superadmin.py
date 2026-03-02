@@ -862,7 +862,7 @@ def sa_trigger_yearly_backup(agency_id: str, year: int = None, db: Session = Dep
 # ═══════════════════════════════════════════════════════════════════
 
 from fastapi.responses import StreamingResponse
-import json, io, subprocess, shutil
+import json, io
 
 
 def _serialize_row(row):
@@ -927,30 +927,75 @@ def export_database_json(db: Session = Depends(get_db)):
 
 
 @router.get("/backup/db/export-sql", dependencies=[Depends(require_role(["super_admin"]))])
-def export_database_sql():
-    """Export the database using pg_dump (SQL format). Requires pg_dump on server."""
-    pg_dump = shutil.which("pg_dump")
-    if not pg_dump:
-        raise HTTPException(status_code=500, detail="pg_dump not found on server")
+def export_database_sql(db: Session = Depends(get_db)):
+    """Export the database as SQL INSERT statements (pure Python, no pg_dump needed)."""
+    tables = {
+        "agencies": Agency,
+        "users": User,
+        "newspapers": Newspaper,
+        "customers": Customer,
+        "customer_subscriptions": CustomerSubscription,
+        "daily_stock": DailyStock,
+        "worker_assignments": WorkerAssignment,
+        "invoices": Invoice,
+        "audit_logs": AuditLog,
+        "billing_plans": BillingPlan,
+        "agency_templates": AgencyTemplate,
+        "announcements": Announcement,
+        "platform_settings": PlatformSettings,
+    }
 
+    def _sql_value(val):
+        if val is None:
+            return "NULL"
+        if isinstance(val, bool):
+            return "TRUE" if val else "FALSE"
+        if isinstance(val, (int, float)):
+            return str(val)
+        if isinstance(val, (datetime, date)):
+            return f"'{val.isoformat()}'"
+        if isinstance(val, UUID):
+            return f"'{val}'"
+        if isinstance(val, dict):
+            return "'" + json.dumps(val, ensure_ascii=False).replace("'", "''") + "'::jsonb"
+        s = str(val).replace("'", "''")
+        return f"'{s}'"
+
+    lines = [
+        f"-- NewsFlux Full Database Export",
+        f"-- Generated: {datetime.utcnow().isoformat()}Z",
+        f"-- Tables: {len(tables)}",
+        "",
+        "BEGIN;",
+        "",
+    ]
+
+    for table_name, model in tables.items():
+        rows = db.query(model).all()
+        if not rows:
+            lines.append(f"-- {table_name}: 0 rows")
+            lines.append("")
+            continue
+        columns = [col.name for col in model.__table__.columns]
+        col_list = ", ".join(columns)
+        lines.append(f"-- {table_name}: {len(rows)} rows")
+        for row in rows:
+            vals = ", ".join(_sql_value(getattr(row, c)) for c in columns)
+            lines.append(f"INSERT INTO {table_name} ({col_list}) VALUES ({vals});")
+        lines.append("")
+
+    lines.append("COMMIT;")
+    lines.append("")
+
+    sql_bytes = "\n".join(lines).encode("utf-8")
     timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
     filename = f"newsflux_full_backup_{timestamp}.sql"
 
-    try:
-        result = subprocess.run(
-            [pg_dump, settings.DATABASE_URL, "--no-owner", "--no-acl"],
-            capture_output=True, timeout=120,
-        )
-        if result.returncode != 0:
-            raise HTTPException(status_code=500, detail=f"pg_dump failed: {result.stderr.decode()[:500]}")
-
-        return StreamingResponse(
-            io.BytesIO(result.stdout),
-            media_type="application/sql",
-            headers={"Content-Disposition": f"attachment; filename={filename}"},
-        )
-    except subprocess.TimeoutExpired:
-        raise HTTPException(status_code=500, detail="Database export timed out")
+    return StreamingResponse(
+        io.BytesIO(sql_bytes),
+        media_type="application/sql",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
 
 
 @router.get("/backup/db/stats", dependencies=[Depends(require_role(["super_admin"]))])
