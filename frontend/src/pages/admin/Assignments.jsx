@@ -134,7 +134,7 @@ export default function Assignments() {
                                 <div className="p-2 bg-indigo-100 rounded-lg"><Route className="w-4 h-4 text-indigo-600" /></div>
                                 <div>
                                     <h3 className="font-bold text-slate-800">{group.name}</h3>
-                                    <p className="text-xs text-slate-500">{group.assignments.length} {group.assignments.length !== 1 ? t('assignments.customer_assigned') : t('customer')}</p>
+                                    <p className="text-xs text-slate-500">{group.assignments.length} {group.assignments.length !== 1 ? t('assignments.customer_assigned') : t('assignments.customer_assigned_singular')}</p>
                                 </div>
                             </div>
                             <table className="w-full text-left">
