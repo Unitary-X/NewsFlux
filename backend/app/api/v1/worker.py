@@ -110,3 +110,147 @@ def get_announcements(request: Request, db: Session = Depends(get_db)):
         "id": str(a.id), "title": a.title, "message": a.message,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     } for a in anns]
+
+
+@router.get("/route", dependencies=[Depends(require_role(["worker"]))])
+def get_worker_route(request: Request, db: Session = Depends(get_db)):
+    """Get worker's assigned customers in route order."""
+    user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
+    tenant_id = request.state.tenant_id
+    
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found")
+    
+    assignments = db.query(WorkerAssignment).filter(
+        WorkerAssignment.tenant_id == tenant_id,
+        WorkerAssignment.worker_id == user_id
+    ).order_by(WorkerAssignment.route_order).all()
+    
+    route = []
+    for assign in assignments:
+        customer = db.query(Customer).filter(Customer.id == assign.customer_id).first()
+        if customer:
+            route.append({
+                "id": str(customer.id),
+                "name": customer.name,
+                "address": customer.address,
+                "phone": customer.phone,
+                "route_order": assign.route_order
+            })
+    
+    return route
+
+
+@router.get("/sales", dependencies=[Depends(require_role(["worker"]))])
+def get_worker_sales(request: Request, db: Session = Depends(get_db)):
+    """Get worker's sales statistics."""
+    from sqlalchemy import func
+    from datetime import datetime, timedelta
+    
+    user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
+    tenant_id = request.state.tenant_id
+    
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found")
+    
+    # Get deliveries for this worker
+    today = date.today()
+    week_ago = today - timedelta(days=7)
+    month_ago = today - timedelta(days=30)
+    
+    # Daily stats
+    daily_deliveries = db.query(func.count(DailyDelivery.id)).filter(
+        DailyDelivery.worker_id == user_id,
+        DailyDelivery.tenant_id == tenant_id,
+        DailyDelivery.date == today,
+        DailyDelivery.status == "delivered"
+    ).scalar() or 0
+    
+    daily_missed = db.query(func.count(DailyDelivery.id)).filter(
+        DailyDelivery.worker_id == user_id,
+        DailyDelivery.tenant_id == tenant_id,
+        DailyDelivery.date == today,
+        DailyDelivery.status == "missed"
+    ).scalar() or 0
+    
+    # Weekly stats
+    weekly_deliveries = db.query(func.count(DailyDelivery.id)).filter(
+        DailyDelivery.worker_id == user_id,
+        DailyDelivery.tenant_id == tenant_id,
+        DailyDelivery.date >= week_ago,
+        DailyDelivery.status == "delivered"
+    ).scalar() or 0
+    
+    # Monthly stats
+    monthly_deliveries = db.query(func.count(DailyDelivery.id)).filter(
+        DailyDelivery.worker_id == user_id,
+        DailyDelivery.tenant_id == tenant_id,
+        DailyDelivery.date >= month_ago,
+        DailyDelivery.status == "delivered"
+    ).scalar() or 0
+    
+    # Assigned customers count
+    assigned_customers = db.query(func.count(WorkerAssignment.id)).filter(
+        WorkerAssignment.worker_id == user_id,
+        WorkerAssignment.tenant_id == tenant_id
+    ).scalar() or 0
+    
+    # Last 7 days breakdown
+    daily_breakdown = []
+    for i in range(7):
+        check_date = today - timedelta(days=i)
+        delivered = db.query(func.count(DailyDelivery.id)).filter(
+            DailyDelivery.worker_id == user_id,
+            DailyDelivery.tenant_id == tenant_id,
+            DailyDelivery.date == check_date,
+            DailyDelivery.status == "delivered"
+        ).scalar() or 0
+        daily_breakdown.append({
+            "date": check_date.isoformat(),
+            "delivered": delivered
+        })
+    
+    return {
+        "today": {"delivered": daily_deliveries, "missed": daily_missed},
+        "weekly": {"delivered": weekly_deliveries},
+        "monthly": {"delivered": monthly_deliveries},
+        "assigned_customers": assigned_customers,
+        "daily_breakdown": list(reversed(daily_breakdown))
+    }
+
+
+@router.get("/salary", dependencies=[Depends(require_role(["worker"]))])
+def get_worker_salary(request: Request, db: Session = Depends(get_db)):
+    """Get worker's salary records."""
+    from app.models.models import Salary
+    
+    user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
+    tenant_id = request.state.tenant_id
+    
+    if not user_id:
+        raise HTTPException(status_code=401, detail="User ID not found")
+    
+    salaries = db.query(Salary).filter(
+        Salary.worker_id == user_id,
+        Salary.tenant_id == tenant_id
+    ).order_by(Salary.year.desc(), Salary.month.desc()).all()
+    
+    # Calculate totals
+    total_earned = sum(s.total_amount for s in salaries if s.status == "paid")
+    total_pending = sum(s.total_amount for s in salaries if s.status == "pending")
+    
+    return {
+        "salaries": [{
+            "id": str(s.id),
+            "month": s.month,
+            "year": s.year,
+            "base_salary": float(s.base_salary),
+            "bonus": float(s.bonus) if s.bonus else 0.0,
+            "deductions": float(s.deductions) if s.deductions else 0.0,
+            "total_amount": float(s.total_amount),
+            "status": s.status,
+            "notes": s.notes
+        } for s in salaries],
+        "total_earned": float(total_earned),
+        "total_pending": float(total_pending)
+    }

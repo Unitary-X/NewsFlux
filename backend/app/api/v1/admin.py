@@ -23,6 +23,7 @@ from app.schemas.admin import (
     PricingGridUpdate,
 )
 from app.core.security import get_password_hash
+from app.core.audit import log_audit
 
 router = APIRouter()
 
@@ -168,12 +169,16 @@ def stock_summary(request: Request, target_date: str = None, db: Session = Depen
 @router.post("/newspapers", response_model=NewspaperResponse, dependencies=[Depends(require_role(["admin"]))])
 def create_newspaper(request: Request, newspaper: NewspaperCreate, db: Session = Depends(get_db)):
     tenant_id = request.state.tenant_id
+    user_id = request.state.user_id
     new_paper = Newspaper(
         name=newspaper.name,
         base_price=newspaper.base_price,
         tenant_id=tenant_id
     )
     db.add(new_paper)
+    db.flush()  # Get ID before commit
+    log_audit(db, user_id, "CREATE", "newspapers", new_paper.id, 
+              {"name": newspaper.name, "base_price": str(newspaper.base_price)}, tenant_id)
     db.commit()
     db.refresh(new_paper)
     return new_paper
@@ -186,15 +191,22 @@ def list_newspapers(request: Request, db: Session = Depends(get_db)):
 @router.put("/newspapers/{newspaper_id}", response_model=NewspaperResponse, dependencies=[Depends(require_role(["admin"]))])
 def update_newspaper(request: Request, newspaper_id: str, data: NewspaperUpdate, db: Session = Depends(get_db)):
     tid = request.state.tenant_id
+    user_id = request.state.user_id
     paper = db.query(Newspaper).filter(
         Newspaper.id == _parse_uuid(newspaper_id), Newspaper.tenant_id == tid
     ).first()
     if not paper:
         raise HTTPException(status_code=404, detail="Newspaper not found")
+    
+    changes = {}
     if data.name is not None:
+        changes["name"] = {"old": paper.name, "new": data.name}
         paper.name = data.name
     if data.base_price is not None:
+        changes["base_price"] = {"old": str(paper.base_price), "new": str(data.base_price)}
         paper.base_price = data.base_price
+    
+    log_audit(db, user_id, "UPDATE", "newspapers", paper.id, changes, tid)
     db.commit()
     db.refresh(paper)
     return paper
@@ -202,14 +214,19 @@ def update_newspaper(request: Request, newspaper_id: str, data: NewspaperUpdate,
 @router.delete("/newspapers/{newspaper_id}", dependencies=[Depends(require_role(["admin"]))])
 def delete_newspaper(request: Request, newspaper_id: str, db: Session = Depends(get_db)):
     tid = request.state.tenant_id
+    user_id = request.state.user_id
     uid = _parse_uuid(newspaper_id)
     paper = db.query(Newspaper).filter(Newspaper.id == uid, Newspaper.tenant_id == tid).first()
     if not paper:
         raise HTTPException(status_code=404, detail="Newspaper not found")
+    
+    paper_name = paper.name
     # Delete related records first
     db.query(CustomerSubscription).filter(CustomerSubscription.newspaper_id == uid, CustomerSubscription.tenant_id == tid).delete()
     db.query(DailyStock).filter(DailyStock.newspaper_id == uid, DailyStock.tenant_id == tid).delete()
     db.delete(paper)
+    
+    log_audit(db, user_id, "DELETE", "newspapers", uid, {"name": paper_name}, tid)
     db.commit()
     return {"status": "deleted"}
 

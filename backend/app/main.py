@@ -34,11 +34,12 @@ app.add_middleware(TenantMiddleware)
 def read_health():
     return {"status": "ok", "message": "NewsFlux Backend is running!"}
 
-from app.api.v1 import auth, admin, worker, superadmin
+from app.api.v1 import auth, admin, worker, superadmin, backup
 
 # Add API routers:
 app.include_router(auth.router, prefix="/api/v1/auth", tags=["Authentication"])
 app.include_router(admin.router, prefix="/api/v1/admin", tags=["Admin Portal"])
 app.include_router(worker.router, prefix="/api/v1/worker", tags=["Worker PWA"])
 app.include_router(superadmin.router, prefix="/api/v1/superadmin", tags=["Platform Admin"])
+app.include_router(backup.router, tags=["Google Drive Backup"])
 

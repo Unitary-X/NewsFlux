@@ -1,17 +1,29 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
-from datetime import timedelta
+from datetime import timedelta, datetime
 from typing import Optional
+import secrets
 
 from app.api.dependencies import get_db
 from app.models.models import User, Agency, Newspaper, AgencyTemplate
-from app.schemas.auth import LoginRequest, AgencyRegisterRequest, Token
-from app.core.security import verify_password, get_password_hash, create_access_token
+from app.schemas.auth import (
+    LoginRequest, AgencyRegisterRequest, Token,
+    ForgotPasswordRequest, ResetPasswordRequest, ForgotPasswordResponse,
+    RefreshTokenRequest
+)
+from app.core.security import (
+    verify_password, get_password_hash, create_access_token,
+    create_refresh_token, decode_token
+)
 from app.core.config import settings
 from app.core.celery_app import celery_app
 from pydantic import BaseModel
 
 router = APIRouter()
+
+# In-memory password reset token store (username -> (token, expiry))
+# TODO: Move to Redis or database table when scaling
+password_reset_tokens = {}
 
 class RegisterWithTemplate(BaseModel):
     agency_name: str
@@ -73,14 +85,23 @@ def register_agency(request: RegisterWithTemplate, db: Session = Depends(get_db)
             ]
         )
     
-    # 5. Log them in automatically
+    # 5. Log them in automatically with access + refresh tokens
     access_token = create_access_token(
         subject=new_admin.id,
         role=new_admin.role,
         tenant_id=new_admin.tenant_id
     )
+    refresh_token = create_refresh_token(
+        subject=new_admin.id,
+        role=new_admin.role,
+        tenant_id=new_admin.tenant_id
+    )
     
-    return {"access_token": access_token, "token_type": "bearer"}
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token
+    }
 
 @router.post("/login", response_model=Token)
 def login(request: LoginRequest, db: Session = Depends(get_db)):
@@ -101,9 +122,148 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
                 detail="Your agency account is currently suspended. Please contact platform support."
             )
 
+    # Generate access + refresh tokens
     access_token = create_access_token(
         subject=user.id,
         role=user.role,
         tenant_id=user.tenant_id
     )
-    return {"access_token": access_token, "token_type": "bearer"}
+    refresh_token = create_refresh_token(
+        subject=user.id,
+        role=user.role,
+        tenant_id=user.tenant_id
+    )
+    
+    return {
+        "access_token": access_token,
+        "token_type": "bearer",
+        "refresh_token": refresh_token
+    }
+
+
+@router.post("/refresh", response_model=Token)
+def refresh_access_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
+    """
+    Exchange a valid refresh token for a new access token (and optionally new refresh token).
+    This prevents session timeout by allowing clients to get fresh tokens.
+    """
+    try:
+        payload = decode_token(request.refresh_token)
+        
+        # Verify it's a refresh token
+        if payload.get("type") != "refresh":
+            raise ValueError("Invalid token type")
+        
+        user_id = payload.get("sub")
+        role = payload.get("role")
+        tenant_id = payload.get("tenant_id")
+        
+        # Verify user still exists and is active
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User not found"
+            )
+        
+        # Verify agency is still active (if applicable)
+        if tenant_id:
+            agency = db.query(Agency).filter(Agency.id == tenant_id).first()
+            if not agency or agency.status != "active":
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Agency account is suspended"
+                )
+        
+        # Issue new access token
+        new_access_token = create_access_token(
+            subject=user_id,
+            role=role,
+            tenant_id=tenant_id
+        )
+        
+        # Optionally rotate refresh token (more secure)
+        new_refresh_token = create_refresh_token(
+            subject=user_id,
+            role=role,
+            tenant_id=tenant_id
+        )
+        
+        return {
+            "access_token": new_access_token,
+            "token_type": "bearer",
+            "refresh_token": new_refresh_token
+        }
+        
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=str(e)
+        )
+
+
+@router.post("/forgot-password", response_model=ForgotPasswordResponse)
+def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Request password reset. Generates a reset token.
+    In production: send token via email. For now: return token in response.
+    """
+    user = db.query(User).filter(User.username == request.username).first()
+    
+    # Always return success to prevent username enumeration
+    if not user:
+        return ForgotPasswordResponse(
+            message="If this username exists, a password reset link has been sent."
+        )
+    
+    # Generate secure reset token
+    reset_token = secrets.token_urlsafe(32)
+    expiry = datetime.utcnow() + timedelta(hours=1)  # 1-hour expiry
+    
+    # Store token (username -> (token, expiry))
+    password_reset_tokens[user.username] = (reset_token, expiry)
+    
+    # TODO: When email is implemented, send email with reset link
+    # For now, return token in response for development/testing
+    return ForgotPasswordResponse(
+        message="If this username exists, a password reset link has been sent.",
+        reset_token=reset_token  # Remove this in production
+    )
+
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    """
+    Complete password reset using token + new password.
+    """
+    # Find username by token
+    username = None
+    for uname, (token, expiry) in password_reset_tokens.items():
+        if token == request.token:
+            # Check expiry
+            if datetime.utcnow() > expiry:
+                break  # Token expired
+            username = uname
+            break
+    
+    if not username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid or expired reset token"
+        )
+    
+    # Update password
+    user = db.query(User).filter(User.username == username).first()
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="User not found"
+        )
+    
+    user.password_hash = get_password_hash(request.new_password)
+    db.commit()
+    
+    # Invalidate token
+    del password_reset_tokens[username]
+    
+    return {"message": "Password successfully reset. You can now log in with your new password."}

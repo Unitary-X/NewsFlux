@@ -2,6 +2,8 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import Login from './pages/Login';
+import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from './pages/admin/Dashboard';
 import StockTable from './pages/admin/StockTable';
 import Newspapers from './pages/admin/Newspapers';
@@ -15,6 +17,9 @@ import Reports from './pages/admin/Reports';
 import PricingGrid from './pages/admin/PricingGrid';
 import Backup from './pages/admin/Backup';
 import WorkerDashboard from './pages/worker/Dashboard';
+import MySales from './pages/worker/MySales';
+import MySalary from './pages/worker/MySalary';
+import RouteView from './pages/worker/RouteView';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
 import SuperAdminAgencies from './pages/superadmin/Agencies';
 import SuperAdminAnalytics from './pages/superadmin/Analytics';
@@ -53,6 +58,8 @@ function App() {
         <AnnouncementBanner />
         <Routes>
           <Route path="/login" element={<Login />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Admin Routes with Sidebar Layout */}
           <Route
@@ -84,6 +91,9 @@ function App() {
               <ProtectedRoute allowedRoles={['worker']}>
                 <Routes>
                   <Route path="/" element={<WorkerDashboard />} />
+                  <Route path="/sales" element={<MySales />} />
+                  <Route path="/salary" element={<MySalary />} />
+                  <Route path="/route" element={<RouteView />} />
                 </Routes>
               </ProtectedRoute>
             }

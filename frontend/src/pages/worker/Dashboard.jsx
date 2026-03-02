@@ -4,8 +4,9 @@ import { useSyncQueue } from '../../hooks/useSyncQueue';
 import api from '../../utils/api';
 import { db } from '../../utils/db';
 import StepperInput from '../../components/worker/StepperInput';
-import { Wifi, WifiOff, RefreshCw, LogOut, CheckCircle } from 'lucide-react';
+import { Wifi, WifiOff, RefreshCw, LogOut, CheckCircle, DollarSign, TrendingUp, Navigation } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { Link } from 'react-router-dom';
 
 export default function WorkerDashboard() {
     const { user, logout } = useAuth();
@@ -116,6 +117,33 @@ export default function WorkerDashboard() {
                     </button>
                 </div>
             </header>
+
+            {/* Quick Access Menu */}
+            <div className="px-4 pt-4 pb-2 bg-white border-b border-slate-200 overflow-x-auto">
+                <div className="flex gap-3 min-w-max">
+                    <Link 
+                        to="/worker/sales" 
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-blue-500 to-blue-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
+                    >
+                        <TrendingUp className="w-4 h-4" />
+                        <span className="font-semibold text-sm">{t('worker.my_sales', 'My Sales')}</span>
+                    </Link>
+                    <Link 
+                        to="/worker/salary" 
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-emerald-500 to-emerald-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
+                    >
+                        <DollarSign className="w-4 h-4" />
+                        <span className="font-semibold text-sm">{t('worker.my_salary', 'My Salary')}</span>
+                    </Link>
+                    <Link 
+                        to="/worker/route" 
+                        className="flex items-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-lg shadow-md hover:shadow-lg transition-all"
+                    >
+                        <Navigation className="w-4 h-4" />
+                        <span className="font-semibold text-sm">{t('worker.my_route', 'My Route')}</span>
+                    </Link>
+                </div>
+            </div>
 
             {/* Tabs */}
             <div className="flex p-4 shrink-0 gap-2 bg-slate-50 relative z-0">
