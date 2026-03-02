@@ -31,7 +31,11 @@
         "base_price": "Base Price",
         "no_newspapers": "No newspapers found. Add one to the left to get started.",
         "add_success": "Newspaper added!",
-        "add_fail": "Failed to add newspaper"
+        "add_fail": "Failed to add newspaper",
+        "delete_confirm": "Delete \"{{name}}\"? Related stock data and subscriptions will also be removed.",
+        "delete_fail": "Failed to delete newspaper",
+        "update_fail": "Failed to update newspaper",
+        "edit": "Edit Newspaper"
     },
     "workers": {
         "title": "Worker Roster",
