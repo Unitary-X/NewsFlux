@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { useTranslation } from 'react-i18next';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
 import { Newspaper, Loader2, Globe } from 'lucide-react';
@@ -30,13 +30,13 @@ export default function Login() {
                 password: data.password
             });
 
-            const { access_token } = response.data;
+            const { access_token, refresh_token } = response.data;
 
             // We need the role, we should parse the JWT manually since backend didn't return it in body
             const payload = JSON.parse(atob(access_token.split('.')[1]));
             const userState = { id: payload.sub, role: payload.role, tenant_id: payload.tenant_id };
 
-            login(access_token, userState);
+            login(access_token, refresh_token, userState);
 
             // Role-based routing
             if (payload.role === 'admin') navigate('/admin');
@@ -123,6 +123,15 @@ export default function Login() {
                                 t('login.submit')
                             )}
                         </button>
+
+                        <div className="text-center mt-4">
+                            <Link
+                                to="/forgot-password"
+                                className="text-sm text-sky-600 hover:text-sky-700 font-medium transition-colors"
+                            >
+                                {t('login.forgot_password') || 'Forgot Password?'}
+                            </Link>
+                        </div>
                     </form>
                 </div>
             </div>
