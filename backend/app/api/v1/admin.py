@@ -1084,7 +1084,8 @@ def gdrive_connect(request: Request):
 @router.get("/backup/google/callback")
 def gdrive_callback(code: str, request: Request, db: Session = Depends(get_db)):
     """OAuth callback — exchange code for tokens and store refresh token."""
-    from app.services.gdrive_service import exchange_code_for_tokens, encrypt_token
+    from app.services.gdrive_service import exchange_code_for_tokens
+    from app.core.security import encrypt_token
     tid = request.state.tenant_id
     if not tid:
         raise HTTPException(status_code=401, detail="Authentication required")

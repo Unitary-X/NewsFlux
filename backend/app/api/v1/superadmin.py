@@ -1233,7 +1233,8 @@ def sa_gdrive_connect():
 @router.get("/backup/gdrive/callback", dependencies=[Depends(require_role(["super_admin"]))])
 def sa_gdrive_callback(code: str, db: Session = Depends(get_db)):
     """OAuth callback — store super admin's Drive refresh token."""
-    from app.services.gdrive_service import exchange_code_for_tokens, encrypt_token
+    from app.services.gdrive_service import exchange_code_for_tokens
+    from app.core.security import encrypt_token
     tokens = exchange_code_for_tokens(code)
     if not tokens.get("refresh_token"):
         raise HTTPException(status_code=400, detail="No refresh token received. Try disconnecting and reconnecting.")

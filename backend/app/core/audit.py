@@ -33,9 +33,8 @@ def log_audit(
     audit = AuditLog(
         user_id=user_id,
         action=action,
-        resource=resource, 
-        resource_id=resource_id,
-        details=details or {},
+        target_table=resource,
+        changes=details or {},
         tenant_id=tenant_id
     )
     db.add(audit)

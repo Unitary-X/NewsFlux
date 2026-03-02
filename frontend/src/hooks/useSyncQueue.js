@@ -6,43 +6,6 @@ export function useSyncQueue() {
     const [isOnline, setIsOnline] = useState(navigator.onLine);
     const [isSyncing, setIsSyncing] = useState(false);
 
-    useEffect(() => {
-        const handleOnline = () => {
-            setIsOnline(true);
-            flushQueue();
-        };
-        const handleOffline = () => setIsOnline(false);
-
-        window.addEventListener('online', handleOnline);
-        window.addEventListener('offline', handleOffline);
-
-        // Try flushing on initial load if online
-        if (navigator.onLine) {
-            flushQueue();
-        }
-
-        return () => {
-            window.removeEventListener('online', handleOnline);
-            window.removeEventListener('offline', handleOffline);
-        };
-    }, []);
-
-    const queueAction = async (type, payload) => {
-        const timestamp = new Date().toISOString();
-
-        // Store in IndexedDB
-        await db.syncQueue.add({
-            type,
-            payload,
-            timestamp,
-            status: 'pending' // 'pending' | 'syncing'
-        });
-
-        if (navigator.onLine) {
-            flushQueue();
-        }
-    };
-
     const flushQueue = useCallback(async () => {
         if (isSyncing || !navigator.onLine) return;
 
@@ -78,7 +41,7 @@ export function useSyncQueue() {
             await db.syncQueue.bulkDelete(jobIds);
 
         } catch (err) {
-            console.error('Background Sync Failed. Retrying later bounds...', err);
+            console.error('Background Sync Failed. Retrying later...', err);
             // Revert status so they can be tried again
             const pendingJobs = await db.syncQueue.where('status').equals('syncing').toArray();
             await Promise.all(pendingJobs.map(job => db.syncQueue.update(job.id, { status: 'pending' })));
@@ -86,6 +49,27 @@ export function useSyncQueue() {
             setIsSyncing(false);
         }
     }, [isSyncing]);
+
+    useEffect(() => {
+        const handleOnline = () => {
+            setIsOnline(true);
+            flushQueue();
+        };
+        const handleOffline = () => setIsOnline(false);
+
+        window.addEventListener('online', handleOnline);
+        window.addEventListener('offline', handleOffline);
+
+        // Try flushing on initial load if online
+        if (navigator.onLine) {
+            flushQueue();
+        }
+
+        return () => {
+            window.removeEventListener('online', handleOnline);
+            window.removeEventListener('offline', handleOffline);
+        };
+    }, [flushQueue]);
 
     return { isOnline, isSyncing, queueAction };
 }

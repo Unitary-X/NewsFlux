@@ -228,7 +228,7 @@ export default function WorkerDashboard() {
 
             {/* Notification Toast if Offline Actions are Queued */}
             {!isOnline && (
-                <div className="absolute bottom-6 left-4 r{t('worker.action_complete')}-blur tracking-tight text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-50">
+                <div className="absolute bottom-6 left-4 right-4 bg-slate-800/80 backdrop-blur tracking-tight text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-50">
                     <span className="text-sm font-medium">Changes saved securely offline.</span>
                     <WifiOff className="w-4 h-4 text-slate-400" />
                 </div>

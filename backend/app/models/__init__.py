@@ -13,6 +13,7 @@ from .models import (
     Announcement,
     PlatformSettings,
     Salary,
-    DailyDelivery
+    DailyDelivery,
+    Backup,
 )
 

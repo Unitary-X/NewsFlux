@@ -3,10 +3,8 @@ Google Drive Service — OAuth2 flow for agency admins + file upload.
 Uses the `drive.file` scope so the app can only access files it creates.
 """
 import json
-import base64
 import logging
 from typing import Optional
-from cryptography.fernet import Fernet
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
 from googleapiclient.discovery import build
@@ -19,19 +17,8 @@ logger = logging.getLogger(__name__)
 SCOPES = ["https://www.googleapis.com/auth/drive.file"]
 
 # ── Token encryption ─────────────────────────────────────────────
-# Derive a Fernet key from the app SECRET_KEY (first 32 bytes, base64-encoded)
-
-def _get_fernet() -> Fernet:
-    key_bytes = settings.SECRET_KEY.encode()[:32].ljust(32, b"\0")
-    return Fernet(base64.urlsafe_b64encode(key_bytes))
-
-
-def encrypt_token(token: str) -> str:
-    return _get_fernet().encrypt(token.encode()).decode()
-
-
-def decrypt_token(encrypted: str) -> str:
-    return _get_fernet().decrypt(encrypted.encode()).decode()
+# Use the canonical encrypt/decrypt from security.py to avoid key mismatch
+from app.core.security import encrypt_token, decrypt_token  # noqa: F401
 
 
 # ── OAuth2 flow ──────────────────────────────────────────────────

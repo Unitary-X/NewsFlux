@@ -4,8 +4,7 @@ import os
 # Explicitly add the backend folder to PYTHONPATH
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 
-import asyncio
-from app.db.database import SessionLocal
+from app.api.dependencies import SessionLocal
 from app.models.models import User, Agency
 from app.core.security import get_password_hash
 import uuid
@@ -18,10 +17,9 @@ def seed_database():
         if not super_exists:
             super_admin = User(
                 username="superadmin",
-                hashed_password=get_password_hash("super123"),
+                password_hash=get_password_hash("super123"),
                 role="super_admin",
-                name="SaaS Owner",
-                tenant_id="global"
+                tenant_id=None
             )
             db.add(super_admin)
             print("Created Super Admin (superadmin / super123)")
@@ -33,7 +31,6 @@ def seed_database():
             test_agency = Agency(
                 id=agency_id,
                 name="Test Distributors Inc",
-                contact_email="test@test.com",
                 status="active"
             )
             db.add(test_agency)
@@ -42,9 +39,8 @@ def seed_database():
             # Create an Agency Admin
             admin_user = User(
                 username="admin",
-                hashed_password=get_password_hash("admin123"),
+                password_hash=get_password_hash("admin123"),
                 role="admin",
-                name="Agency Manager",
                 tenant_id=agency_id
             )
             db.add(admin_user)
@@ -53,9 +49,8 @@ def seed_database():
             # Create an Agency Worker
             worker_user = User(
                 username="worker",
-                hashed_password=get_password_hash("worker123"),
+                password_hash=get_password_hash("worker123"),
                 role="worker",
-                name="Delivery Staff 1",
                 tenant_id=agency_id
             )
             db.add(worker_user)

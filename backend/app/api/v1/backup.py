@@ -138,10 +138,9 @@ def google_oauth_callback(
         db.commit()
 
         if user_id:
-            log_audit(db, user_id, 'GDRIVE_CONNECTED', 'agencies', {
-                'agency_id': str(agency.id),
-                'folder_id': backup_folder_id,
-            })
+            log_audit(db, user_id, 'GDRIVE_CONNECTED', 'agencies',
+                      details={'agency_id': str(agency.id), 'folder_id': backup_folder_id},
+                      tenant_id=tid)
 
         # Redirect user back to the frontend backup page
         frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"
@@ -167,9 +166,9 @@ def disconnect_google_drive(request: Request, db: Session = Depends(get_db)):
     agency.gdrive_connected_at = None
     db.commit()
 
-    log_audit(db, user_id, 'GDRIVE_DISCONNECTED', 'agencies', {
-        'agency_id': str(agency.id),
-    })
+    log_audit(db, user_id, 'GDRIVE_DISCONNECTED', 'agencies',
+              details={'agency_id': str(agency.id)},
+              tenant_id=tid)
 
     return {"success": True, "message": "Google Drive disconnected"}
 
@@ -270,9 +269,8 @@ def delete_backup(
     db.delete(backup_rec)
     db.commit()
 
-    log_audit(db, user_id, 'BACKUP_DELETED', 'backups', {
-        'backup_id': backup_id,
-        'backup_name': name,
-    })
+    log_audit(db, user_id, 'BACKUP_DELETED', 'backups',
+              details={'backup_id': backup_id, 'backup_name': name},
+              tenant_id=tid)
 
     return {"success": True, "message": f"Backup '{name}' deleted"}

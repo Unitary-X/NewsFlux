@@ -59,7 +59,7 @@ api.interceptors.response.use(
 
             try {
                 // Attempt to refresh the token
-                const response = await axios.post('http://localhost:8000/api/v1/auth/refresh', {
+                const response = await axios.post('/api/v1/auth/refresh', {
                     refresh_token: refreshToken
                 });
 

@@ -333,11 +333,9 @@ def backup_agency_files_to_gdrive(
 
         # Audit log
         if user_id:
-            log_audit(db, user_id, 'BACKUP_CREATED', 'backups', {
-                'backup_id': str(backup.id),
-                'file_name': backup.backup_name,
-                'size_bytes': backup.file_size_bytes
-            })
+            log_audit(db, user_id, 'BACKUP_CREATED', 'backups',
+                      details={'backup_id': str(backup.id), 'file_name': backup.backup_name, 'size_bytes': backup.file_size_bytes},
+                      tenant_id=agency_id)
 
         # Cleanup local temp file
         backup_manager.cleanup_local_backup(zip_file_path)
