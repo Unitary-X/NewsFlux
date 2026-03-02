@@ -14,6 +14,7 @@ class Agency(Base):
     gdrive_refresh_token = Column(Text, nullable=True)       # Encrypted OAuth refresh token
     gdrive_folder_id = Column(String(255), nullable=True)     # Root backup folder ID in admin's Drive
     gdrive_connected_at = Column(DateTime, nullable=True)     # When Drive was connected
+    gdrive_oauth_state = Column(String(512), nullable=True)   # Temporary state for OAuth flow
 
 class User(Base):
     __tablename__ = "users"
@@ -153,12 +154,12 @@ class Backup(Base):
     __tablename__ = "backups"
     id = Column(Uuid, primary_key=True, default=uuid.uuid4)
     agency_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
-    backup_name = Column(String(255), nullable=False)  # File name on Google Drive
-    backup_type = Column(String(50), nullable=False)  # 'files', 'database', 'both'
-    status = Column(String(20), default="pending")  # pending, completed, failed
+    backup_name = Column(String(255), nullable=False)
+    backup_type = Column(String(50), default="files")  # files, database
+    status = Column(String(50), default="pending")  # pending, completed, failed
     file_size_bytes = Column(Integer, nullable=True)
-    gdrive_file_id = Column(String(255), nullable=True)  # Google Drive file ID
-    gdrive_web_link = Column(Text, nullable=True)  # Link to view/download on Drive
-    error_message = Column(Text, nullable=True)  # Error details if failed
+    gdrive_file_id = Column(String(255), nullable=True)
+    gdrive_web_link = Column(String(512), nullable=True)
+    error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)

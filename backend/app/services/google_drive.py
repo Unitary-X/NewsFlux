@@ -28,15 +28,15 @@ class GoogleDriveService:
     SCOPES = ['https://www.googleapis.com/auth/drive.file']
     
     def __init__(self):
-        self.client_id = settings.GOOGLE_OAUTH_CLIENT_ID
-        self.client_secret = settings.GOOGLE_OAUTH_CLIENT_SECRET
-        self.redirect_uri = settings.GOOGLE_OAUTH_REDIRECT_URI
+        self.client_id = settings.GOOGLE_CLIENT_ID
+        self.client_secret = settings.GOOGLE_CLIENT_SECRET
+        self.redirect_uri = settings.GOOGLE_REDIRECT_URI
 
     def get_oauth_flow(self) -> Flow:
         """Create and return Google OAuth 2.0 flow"""
-        return Flow.from_client_config(
+        flow = Flow.from_client_config(
             {
-                "installed": {
+                "web": {
                     "client_id": self.client_id,
                     "client_secret": self.client_secret,
                     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
@@ -45,8 +45,10 @@ class GoogleDriveService:
                     "redirect_uris": [self.redirect_uri],
                 }
             },
-            scopes=self.SCOPES
+            scopes=self.SCOPES,
         )
+        flow.redirect_uri = self.redirect_uri
+        return flow
 
     def get_auth_url(self) -> Tuple[str, str]:
         """

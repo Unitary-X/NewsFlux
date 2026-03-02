@@ -1,66 +1,100 @@
 """
 Google Drive Backup API Endpoints
+Uses request.state for auth (set by TenantMiddleware).
 """
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import uuid
 
-from app.api.dependencies import get_current_user, get_db
-from app.models.models import User, Agency, Backup
+from app.api.dependencies import get_db, require_role
+from app.models.models import Agency, Backup
 from app.services.google_drive import GoogleDriveService, backup_agency_files_to_gdrive
 from app.core.config import settings
 from app.core.audit import log_audit
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/v1/backup", tags=["backup"])
+router = APIRouter(prefix="/api/v1/backup")
+
 
 # ============= SCHEMAS =============
 
-class BackupMetadata(BaseModel):
+class BackupOut(BaseModel):
     id: str
     backup_name: str
     backup_type: str
     status: str
-    file_size_bytes: Optional[int]
-    gdrive_web_link: Optional[str]
+    file_size_bytes: Optional[int] = None
+    gdrive_web_link: Optional[str] = None
     created_at: str
-    completed_at: Optional[str]
+    completed_at: Optional[str] = None
 
     class Config:
         from_attributes = True
 
 
+def _backup_to_dict(b: Backup) -> dict:
+    return {
+        "id": str(b.id),
+        "backup_name": b.backup_name,
+        "backup_type": b.backup_type,
+        "status": b.status,
+        "file_size_bytes": b.file_size_bytes,
+        "gdrive_web_link": b.gdrive_web_link,
+        "created_at": b.created_at.isoformat() if b.created_at else None,
+        "completed_at": b.completed_at.isoformat() if b.completed_at else None,
+    }
+
+
+# ============= Connection Status =============
+
+@router.get("/status", dependencies=[Depends(require_role(["admin", "super_admin"]))])
+def get_gdrive_status(request: Request, db: Session = Depends(get_db)):
+    """Check if Google Drive is connected for this agency"""
+    # Check if Google Drive integration is configured on the server
+    enabled = bool(
+        getattr(settings, 'GOOGLE_CLIENT_ID', None)
+        and getattr(settings, 'GOOGLE_CLIENT_SECRET', None)
+    )
+    if not enabled:
+        return {"connected": False, "enabled": False}
+
+    tid = request.state.tenant_id
+    agency = db.query(Agency).filter(Agency.id == tid).first()
+    if not agency:
+        return {"connected": False, "enabled": True}
+
+    connected = bool(agency.gdrive_refresh_token and agency.gdrive_folder_id)
+    result = {"connected": connected, "enabled": True}
+    if connected and agency.gdrive_connected_at:
+        result["connected_at"] = agency.gdrive_connected_at.isoformat()
+    return result
+
+
 # ============= OAuth Endpoints =============
 
-@router.get("/google/auth-url")
-def get_google_auth_url(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """
-    Get Google OAuth authorization URL
-    
-    User must have admin/superadmin role with agency
-    """
-    # Verify user has agency (admin only)
-    if current_user.role not in ['admin', 'super_admin']:
-        raise HTTPException(status_code=403, detail="Only admins can manage backups")
+@router.get("/google/auth-url", dependencies=[Depends(require_role(["admin", "super_admin"]))])
+def get_google_auth_url(request: Request, db: Session = Depends(get_db)):
+    """Get Google OAuth authorization URL"""
+    tid = request.state.tenant_id
+    user_id = request.state.user_id
 
-    agency = db.query(Agency).filter(Agency.id == current_user.tenant_id).first()
+    agency = db.query(Agency).filter(Agency.id == tid).first()
     if not agency:
         raise HTTPException(status_code=404, detail="Agency not found")
 
     try:
         gdrive_service = GoogleDriveService()
         auth_url, state = gdrive_service.get_auth_url()
-        
-        return {
-            "auth_url": auth_url,
-            "state": state,
-            "message": "Redirect user to this URL to authenticate with Google"
-        }
+
+        # Store state → tenant mapping so the callback can find the agency
+        # We encode tenant_id + user_id in the state param stored in DB
+        agency.gdrive_oauth_state = f"{state}|{tid}|{user_id}"
+        db.commit()
+
+        return {"auth_url": auth_url, "state": state}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to generate auth URL: {str(e)}")
 
@@ -69,227 +103,176 @@ def get_google_auth_url(
 def google_oauth_callback(
     code: str = Query(...),
     state: str = Query(...),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
-    Handle Google OAuth callback
-    Exchange code for access/refresh tokens
+    Handle Google OAuth callback.
+    This is hit by a browser redirect from Google — no Bearer token.
+    We look up the agency via the state parameter stored earlier.
     """
-    if current_user.role not in ['admin', 'super_admin']:
-        raise HTTPException(status_code=403, detail="Only admins can manage backups")
-
-    agency = db.query(Agency).filter(Agency.id == current_user.tenant_id).first()
+    # Find agency by state
+    agency = db.query(Agency).filter(
+        Agency.gdrive_oauth_state.like(f"{state}|%")
+    ).first()
     if not agency:
-        raise HTTPException(status_code=404, detail="Agency not found")
+        raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
+
+    # Extract user_id from stored state
+    parts = (agency.gdrive_oauth_state or "").split("|")
+    user_id = parts[2] if len(parts) >= 3 else None
+
+    # Clear state
+    agency.gdrive_oauth_state = None
 
     try:
         gdrive_service = GoogleDriveService()
         tokens = gdrive_service.exchange_code_for_token(code, state)
-        
-        # Create Drive service and get user's root folder
+
         drive = gdrive_service.get_drive_service(tokens['access_token'])
-        
-        # Create backup folder in user's Drive
         backup_folder_id = gdrive_service.create_backup_folder(drive)
-        
-        # Store encrypted refresh token and folder ID in agency
+
         from app.core.security import encrypt_token
-        encrypted_token = encrypt_token(tokens['refresh_token'])
-        
-        agency.gdrive_refresh_token = encrypted_token
+        agency.gdrive_refresh_token = encrypt_token(tokens['refresh_token'])
         agency.gdrive_folder_id = backup_folder_id
         agency.gdrive_connected_at = datetime.utcnow()
         db.commit()
-        
-        # Audit log
-        log_audit(db, current_user.id, 'GDRIVE_CONNECTED', 'agencies', {
-            'agency_id': str(agency.id),
-            'folder_id': backup_folder_id
-        })
-        
-        return {
-            "success": True,
-            "message": "Google Drive successfully connected",
-            "backup_folder_id": backup_folder_id
-        }
+
+        if user_id:
+            log_audit(db, user_id, 'GDRIVE_CONNECTED', 'agencies', {
+                'agency_id': str(agency.id),
+                'folder_id': backup_folder_id,
+            })
+
+        # Redirect user back to the frontend backup page
+        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"
+        return RedirectResponse(url=f"{frontend_url}/admin/backup?connected=true")
 
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OAuth callback failed: {str(e)}")
+        frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"
+        return RedirectResponse(url=f"{frontend_url}/admin/backup?error=oauth_failed")
 
 
-@router.post("/disconnect-google")
-def disconnect_google_drive(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
+@router.post("/disconnect-google", dependencies=[Depends(require_role(["admin", "super_admin"]))])
+def disconnect_google_drive(request: Request, db: Session = Depends(get_db)):
     """Disconnect Google Drive from agency"""
-    if current_user.role not in ['admin', 'super_admin']:
-        raise HTTPException(status_code=403, detail="Only admins can manage backups")
+    tid = request.state.tenant_id
+    user_id = request.state.user_id
 
-    agency = db.query(Agency).filter(Agency.id == current_user.tenant_id).first()
+    agency = db.query(Agency).filter(Agency.id == tid).first()
     if not agency:
         raise HTTPException(status_code=404, detail="Agency not found")
 
     agency.gdrive_refresh_token = None
     agency.gdrive_folder_id = None
+    agency.gdrive_connected_at = None
     db.commit()
-    
-    # Audit log
-    log_audit(db, current_user.id, 'GDRIVE_DISCONNECTED', 'agencies', {
-        'agency_id': str(agency.id)
+
+    log_audit(db, user_id, 'GDRIVE_DISCONNECTED', 'agencies', {
+        'agency_id': str(agency.id),
     })
-    
+
     return {"success": True, "message": "Google Drive disconnected"}
 
 
-# ============= Backup Management Endpoints =============
+# ============= Backup Management =============
 
-@router.post("/trigger-backup")
+@router.post("/trigger-backup", dependencies=[Depends(require_role(["admin", "super_admin"]))])
 def trigger_manual_backup(
+    request: Request,
+    db: Session = Depends(get_db),
     backup_type: str = Query("files", description="Type: 'files' or 'database'"),
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
 ):
-    """
-    Manually trigger backup to Google Drive
-    Requires admin role
-    """
-    if current_user.role not in ['admin', 'super_admin']:
-        raise HTTPException(status_code=403, detail="Only admins can trigger backups")
+    """Manually trigger a backup to Google Drive"""
+    tid = request.state.tenant_id
+    user_id = request.state.user_id
+
+    backup_record = Backup(
+        id=uuid.uuid4(),
+        agency_id=tid,
+        backup_name=f"manual_backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
+        backup_type=backup_type,
+        status="pending",
+    )
+    db.add(backup_record)
+    db.commit()
 
     try:
-        # Create backup record
-        backup = Backup(
-            id=uuid.uuid4(),
-            agency_id=current_user.tenant_id,
-            backup_name=f"manual_backup_{datetime.utcnow().strftime('%Y%m%d_%H%M%S')}",
-            backup_type=backup_type,
-            status='pending'
-        )
-        db.add(backup)
-        db.commit()
-        
-        # Trigger backup (this would be a Celery task in production)
-        success, message = backup_agency_files_to_gdrive(
-            db,
-            current_user.tenant_id,
-            current_user.id
-        )
-        
+        success, message = backup_agency_files_to_gdrive(db, tid, user_id)
+
         if success:
-            backup.status = 'completed'
-            backup.completed_at = datetime.utcnow()
+            backup_record.status = "completed"
+            backup_record.completed_at = datetime.utcnow()
         else:
-            backup.status = 'failed'
-            backup.error_message = message
-        
+            backup_record.status = "failed"
+            backup_record.error_message = message
+
         db.commit()
-        
-        return {
-            "success": success,
-            "message": message,
-            "backup_id": str(backup.id)
-        }
+        return {"success": success, "message": message, "backup_id": str(backup_record.id)}
     except Exception as e:
-        return {
-            "success": False,
-            "message": f"Backup failed: {str(e)}"
-        }
+        backup_record.status = "failed"
+        backup_record.error_message = str(e)
+        db.commit()
+        return {"success": False, "message": f"Backup failed: {str(e)}"}
 
 
-@router.get("/list", response_model=List[BackupMetadata])
+@router.get("/list", dependencies=[Depends(require_role(["admin", "super_admin"]))])
 def list_backups(
-    current_user: User = Depends(get_current_user),
+    request: Request,
     db: Session = Depends(get_db),
     limit: int = Query(50, ge=1, le=100),
-    offset: int = Query(0, ge=0)
+    offset: int = Query(0, ge=0),
 ):
-    """
-    List backup history for agency
-    Super admin can see all agencies' backups
-    """
-    if current_user.role == 'super_admin':
-        backups = db.query(Backup).order_by(
-            Backup.created_at.desc()
-        ).limit(limit).offset(offset).all()
-    else:
-        backups = db.query(Backup).filter(
-            Backup.agency_id == current_user.tenant_id
-        ).order_by(
-            Backup.created_at.desc()
-        ).limit(limit).offset(offset).all()
-    
-    return [BackupMetadata.from_orm(b) for b in backups]
+    """List backup history for the current agency"""
+    tid = request.state.tenant_id
+    role = request.state.role
+
+    query = db.query(Backup)
+    if role != "super_admin":
+        query = query.filter(Backup.agency_id == tid)
+
+    rows = query.order_by(Backup.created_at.desc()).limit(limit).offset(offset).all()
+    return [_backup_to_dict(b) for b in rows]
 
 
-@router.delete("/delete/{backup_id}")
+@router.delete("/delete/{backup_id}", dependencies=[Depends(require_role(["admin", "super_admin"]))])
 def delete_backup(
     backup_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    request: Request,
+    db: Session = Depends(get_db),
 ):
-    """
-    Delete backup (both locally and from Google Drive)
-    Admin only
-    """
-    if current_user.role not in ['admin', 'super_admin']:
-        raise HTTPException(status_code=403, detail="Only admins can delete backups")
+    """Delete a backup record and optionally from Google Drive"""
+    tid = request.state.tenant_id
+    role = request.state.role
+    user_id = request.state.user_id
 
-    backup = db.query(Backup).filter(Backup.id == backup_id).first()
-    if not backup:
+    backup_rec = db.query(Backup).filter(Backup.id == backup_id).first()
+    if not backup_rec:
         raise HTTPException(status_code=404, detail="Backup not found")
 
-    # Check permissions (admin can only delete own agency backups)
-    if current_user.role == 'admin' and backup.agency_id != current_user.tenant_id:
+    if role != "super_admin" and backup_rec.agency_id != tid:
         raise HTTPException(status_code=403, detail="No permission to delete this backup")
 
-    try:
-        # Delete from Google Drive if file_id exists
-        if backup.gdrive_file_id:
-            agency = db.query(Agency).filter(Agency.id == backup.agency_id).first()
-            if agency and agency.gdrive_refresh_token:
-                from app.core.security import decrypt_token
-                try:
-                    refresh_token = decrypt_token(agency.gdrive_refresh_token)
-                    gdrive_service = GoogleDriveService()
-                    access_token = gdrive_service.refresh_access_token(refresh_token)
-                    drive = gdrive_service.get_drive_service(access_token)
-                    gdrive_service.delete_remote_file(drive, backup.gdrive_file_id)
-                except Exception:
-                    pass  # Silently fail, backup record is still deleted
+    # Try to delete from Google Drive
+    if backup_rec.gdrive_file_id:
+        agency = db.query(Agency).filter(Agency.id == backup_rec.agency_id).first()
+        if agency and agency.gdrive_refresh_token:
+            from app.core.security import decrypt_token
+            try:
+                refresh_token = decrypt_token(agency.gdrive_refresh_token)
+                gdrive_service = GoogleDriveService()
+                access_token = gdrive_service.refresh_access_token(refresh_token)
+                drive = gdrive_service.get_drive_service(access_token)
+                gdrive_service.delete_remote_file(drive, backup_rec.gdrive_file_id)
+            except Exception:
+                pass  # Still delete the DB record
 
-        # Delete from database
-        db.delete(backup)
-        db.commit()
-        
-        # Audit log
-        log_audit(db, current_user.id, 'BACKUP_DELETED', 'backups', {
-            'backup_id': backup_id,
-            'backup_name': backup.backup_name
-        })
-        
-        return {
-            "success": True,
-            "message": f"Backup '{backup.backup_name}' deleted successfully"
-        }
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Delete failed: {str(e)}")
+    name = backup_rec.backup_name
+    db.delete(backup_rec)
+    db.commit()
 
+    log_audit(db, user_id, 'BACKUP_DELETED', 'backups', {
+        'backup_id': backup_id,
+        'backup_name': name,
+    })
 
-@router.get("/status/{backup_id}")
-def get_backup_status(
-    backup_id: str,
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
-):
-    """Get backup status and metadata"""
-    backup = db.query(Backup).filter(Backup.id == backup_id).first()
-    if not backup:
-        raise HTTPException(status_code=404, detail="Backup not found")
-    
-    # Check permissions
-    if current_user.role != 'super_admin' and backup.agency_id != current_user.tenant_id:
-        raise HTTPException(status_code=403, detail="No permission to view this backup")
-    
-    return BackupMetadata.from_orm(backup)
+    return {"success": True, "message": f"Backup '{name}' deleted"}
