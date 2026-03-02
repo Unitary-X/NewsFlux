@@ -855,3 +855,128 @@ def sa_trigger_yearly_backup(agency_id: str, year: int = None, db: Session = Dep
         results.append({"file": f"{year}_annual_report.xlsx", "status": "failed", "error": str(e)})
 
     return {"agency": agency.name, "year": year, "results": results}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# FULL DATABASE BACKUP (super admin only)
+# ═══════════════════════════════════════════════════════════════════
+
+from fastapi.responses import StreamingResponse
+import json, io, subprocess, shutil
+
+
+def _serialize_row(row):
+    """Convert a SQLAlchemy model instance to a JSON-safe dict."""
+    d = {}
+    for col in row.__table__.columns:
+        val = getattr(row, col.name)
+        if val is None:
+            d[col.name] = None
+        elif isinstance(val, (datetime, date)):
+            d[col.name] = val.isoformat()
+        elif isinstance(val, UUID):
+            d[col.name] = str(val)
+        elif hasattr(val, '__float__'):
+            d[col.name] = float(val)
+        else:
+            d[col.name] = val
+    return d
+
+
+@router.get("/backup/db/export-json", dependencies=[Depends(require_role(["super_admin"]))])
+def export_database_json(db: Session = Depends(get_db)):
+    """Export the entire database as a JSON file (all tables, all tenants)."""
+    tables = {
+        "agencies": Agency,
+        "users": User,
+        "newspapers": Newspaper,
+        "customers": Customer,
+        "customer_subscriptions": CustomerSubscription,
+        "daily_stock": DailyStock,
+        "worker_assignments": WorkerAssignment,
+        "invoices": Invoice,
+        "audit_logs": AuditLog,
+        "billing_plans": BillingPlan,
+        "agency_templates": AgencyTemplate,
+        "announcements": Announcement,
+        "platform_settings": PlatformSettings,
+    }
+
+    export = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "format": "newsflux_db_export_v1",
+        "tables": {},
+    }
+
+    for table_name, model in tables.items():
+        rows = db.query(model).all()
+        export["tables"][table_name] = {
+            "count": len(rows),
+            "rows": [_serialize_row(r) for r in rows],
+        }
+
+    json_bytes = json.dumps(export, indent=2, ensure_ascii=False).encode("utf-8")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"newsflux_full_backup_{timestamp}.json"
+
+    return StreamingResponse(
+        io.BytesIO(json_bytes),
+        media_type="application/json",
+        headers={"Content-Disposition": f"attachment; filename={filename}"},
+    )
+
+
+@router.get("/backup/db/export-sql", dependencies=[Depends(require_role(["super_admin"]))])
+def export_database_sql():
+    """Export the database using pg_dump (SQL format). Requires pg_dump on server."""
+    pg_dump = shutil.which("pg_dump")
+    if not pg_dump:
+        raise HTTPException(status_code=500, detail="pg_dump not found on server")
+
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"newsflux_full_backup_{timestamp}.sql"
+
+    try:
+        result = subprocess.run(
+            [pg_dump, settings.DATABASE_URL, "--no-owner", "--no-acl"],
+            capture_output=True, timeout=120,
+        )
+        if result.returncode != 0:
+            raise HTTPException(status_code=500, detail=f"pg_dump failed: {result.stderr.decode()[:500]}")
+
+        return StreamingResponse(
+            io.BytesIO(result.stdout),
+            media_type="application/sql",
+            headers={"Content-Disposition": f"attachment; filename={filename}"},
+        )
+    except subprocess.TimeoutExpired:
+        raise HTTPException(status_code=500, detail="Database export timed out")
+
+
+@router.get("/backup/db/stats", dependencies=[Depends(require_role(["super_admin"]))])
+def database_backup_stats(db: Session = Depends(get_db)):
+    """Get row counts for all tables — used by the backup dashboard."""
+    tables = {
+        "agencies": Agency,
+        "users": User,
+        "newspapers": Newspaper,
+        "customers": Customer,
+        "customer_subscriptions": CustomerSubscription,
+        "daily_stock": DailyStock,
+        "worker_assignments": WorkerAssignment,
+        "invoices": Invoice,
+        "audit_logs": AuditLog,
+        "billing_plans": BillingPlan,
+        "agency_templates": AgencyTemplate,
+        "announcements": Announcement,
+        "platform_settings": PlatformSettings,
+    }
+
+    total = 0
+    table_stats = []
+    for name, model in tables.items():
+        count = db.query(func.count()).select_from(model).scalar()
+        table_stats.append({"table": name, "rows": count})
+        total += count
+
+    return {"total_rows": total, "tables": table_stats}

@@ -262,6 +262,12 @@
         "no_agencies": "No agencies found.",
         "connected_since": "Connected since",
         "drive_not_linked": "Google Drive not linked by admin",
-        "no_files": "No files yet"
+        "no_files": "No files yet",
+        "db_title": "Database Backup",
+        "db_subtitle": "Export the entire platform database as JSON or SQL dump",
+        "db_total_rows": "Total rows",
+        "db_export_json": "Export JSON",
+        "db_export_sql": "Export SQL (pg_dump)",
+        "db_exporting": "Exporting…"
     }
 }

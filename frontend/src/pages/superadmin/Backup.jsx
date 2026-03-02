@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
-import { HardDrive, Cloud, CloudOff, RefreshCw, Loader2, FileSpreadsheet, Calendar, TrendingUp, Search, Building2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { HardDrive, Cloud, CloudOff, RefreshCw, Loader2, FileSpreadsheet, Calendar, TrendingUp, Search, Building2, ChevronDown, ChevronUp, ExternalLink, Database, Download, FileJson, FileCode } from 'lucide-react';
 
 export default function SuperAdminBackup() {
     const { t } = useTranslation();
@@ -13,6 +13,8 @@ export default function SuperAdminBackup() {
     const [filesLoading, setFilesLoading] = useState(false);
     const [triggerLoading, setTriggerLoading] = useState(null); // "agencyId-type"
     const [results, setResults] = useState(null);
+    const [dbStats, setDbStats] = useState(null);
+    const [dbExporting, setDbExporting] = useState(null); // 'json' | 'sql'
 
     const fetchAgencies = useCallback(async () => {
         try {
@@ -26,6 +28,36 @@ export default function SuperAdminBackup() {
     }, []);
 
     useEffect(() => { fetchAgencies(); }, [fetchAgencies]);
+
+    useEffect(() => {
+        api.get('/superadmin/backup/db/stats')
+            .then(res => setDbStats(res.data))
+            .catch(() => setDbStats(null));
+    }, []);
+
+    const exportDb = async (format) => {
+        setDbExporting(format);
+        try {
+            const url = format === 'json'
+                ? '/superadmin/backup/db/export-json'
+                : '/superadmin/backup/db/export-sql';
+            const res = await api.get(url, { responseType: 'blob' });
+            const disposition = res.headers['content-disposition'] || '';
+            const match = disposition.match(/filename="?([^"]+)"?/);
+            const filename = match ? match[1] : `newsflux_backup.${format}`;
+            const a = document.createElement('a');
+            a.href = URL.createObjectURL(res.data);
+            a.download = filename;
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            URL.revokeObjectURL(a.href);
+        } catch {
+            console.error(`Failed to export ${format}`);
+        } finally {
+            setDbExporting(null);
+        }
+    };
 
     const fetchFiles = async (agencyId) => {
         setFilesLoading(true);
@@ -111,6 +143,62 @@ export default function SuperAdminBackup() {
                 <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-5">
                     <p className="text-sm text-slate-400">{t('sa_backup.not_connected')}</p>
                     <p className="text-2xl font-bold text-slate-500 mt-1">{agencies.length - connectedCount}</p>
+                </div>
+            </div>
+
+            {/* Database Backup */}
+            <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6 space-y-4">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-lg font-semibold text-slate-100 flex items-center gap-2">
+                            <Database className="w-5 h-5 text-indigo-400" />
+                            {t('sa_backup.db_title')}
+                        </h2>
+                        <p className="text-sm text-slate-400 mt-0.5">{t('sa_backup.db_subtitle')}</p>
+                    </div>
+                    {dbStats && (
+                        <span className="text-sm text-slate-400">
+                            {t('sa_backup.db_total_rows')}: <span className="font-bold text-white">{dbStats.total_rows.toLocaleString()}</span>
+                        </span>
+                    )}
+                </div>
+
+                {/* Table Stats */}
+                {dbStats && (
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-2">
+                        {dbStats.tables.map(t_item => (
+                            <div key={t_item.table} className="bg-slate-900/50 border border-slate-700/50 rounded-lg px-3 py-2">
+                                <p className="text-[11px] text-slate-500 truncate">{t_item.table}</p>
+                                <p className="text-sm font-semibold text-slate-200">{t_item.rows.toLocaleString()}</p>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Export Buttons */}
+                <div className="flex flex-wrap gap-3 pt-1">
+                    <button
+                        onClick={() => exportDb('json')}
+                        disabled={dbExporting !== null}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-sm font-medium hover:bg-indigo-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {dbExporting === 'json' ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('sa_backup.db_exporting')}</>
+                        ) : (
+                            <><FileJson className="w-4 h-4" /> {t('sa_backup.db_export_json')}</>
+                        )}
+                    </button>
+                    <button
+                        onClick={() => exportDb('sql')}
+                        disabled={dbExporting !== null}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-emerald-600/20 text-emerald-400 border border-emerald-500/30 rounded-xl text-sm font-medium hover:bg-emerald-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {dbExporting === 'sql' ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> {t('sa_backup.db_exporting')}</>
+                        ) : (
+                            <><FileCode className="w-4 h-4" /> {t('sa_backup.db_export_sql')}</>
+                        )}
+                    </button>
                 </div>
             </div>
 
