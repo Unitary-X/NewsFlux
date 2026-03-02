@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 import { Users, UserPlus, Loader2, MapPin, Phone, Pencil, Trash2, X, Search } from 'lucide-react';
+import useTableControls from '../../hooks/useTableControls';
+import { SortHeader, Pagination, BulkBar, SelectCheckbox } from '../../components/admin/TableControls';
 
 export default function Customers() {
     const { t } = useTranslation();
@@ -32,6 +34,8 @@ export default function Customers() {
         const q = search.toLowerCase();
         setFiltered(customers.filter(c => c.name.toLowerCase().includes(q) || (c.phone || '').includes(q)));
     }, [search, customers]);
+
+    const tc = useTableControls(filtered, { defaultSort: { key: 'name', dir: 'asc' } });
 
     const onSubmit = async (data) => {
         setIsAdding(true);
@@ -65,6 +69,17 @@ export default function Customers() {
         if (!confirm(t('customers.delete_confirm', { name }))) return;
         try {
             await api.delete(`/admin/customers/${id}`);
+            fetchCustomers();
+        } catch (err) {
+            alert(t('customers.delete_fail'));
+        }
+    };
+
+    const bulkDelete = async () => {
+        if (!confirm(`Delete ${tc.selected.size} customer(s)?`)) return;
+        try {
+            await Promise.all([...tc.selected].map(id => api.delete(`/admin/customers/${id}`)));
+            tc.clearSelection();
             fetchCustomers();
         } catch (err) {
             alert(t('customers.delete_fail'));
@@ -115,22 +130,26 @@ export default function Customers() {
                                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
                             </div>
                         </div>
+                        <BulkBar count={tc.selected.size} onDelete={bulkDelete} onClear={tc.clearSelection} />
                         {isLoading ? (
                             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
                         ) : filtered.length === 0 ? (
                             <div className="p-12 text-center text-slate-500">{t('customers.no_customers')}</div>
                         ) : (
+                            <>
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('customers.name')}</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('customers.phone')}</th>
+                                        <th className="px-6 py-4 w-10"><SelectCheckbox checked={tc.selected.size === tc.paged.length && tc.paged.length > 0} onChange={tc.toggleSelectAll} /></th>
+                                        <SortHeader label={t('customers.name')} sortKey="name" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
+                                        <SortHeader label={t('customers.phone')} sortKey="phone" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
                                         <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map(cust => (
-                                        <tr key={cust.id} className="hover:bg-slate-50 transition-colors">
+                                    {tc.paged.map(cust => (
+                                        <tr key={cust.id} className={`hover:bg-slate-50 transition-colors ${tc.selected.has(cust.id) ? 'bg-blue-50/50' : ''}`}>
+                                            <td className="px-6 py-4"><SelectCheckbox checked={tc.selected.has(cust.id)} onChange={() => tc.toggleSelect(cust.id)} /></td>
                                             <td className="px-6 py-4 flex items-start gap-4">
                                                 <div className="p-2 bg-emerald-100 rounded-lg shrink-0 mt-1"><Users className="w-4 h-4 text-emerald-600" /></div>
                                                 {editId === cust.id ? (
@@ -172,6 +191,8 @@ export default function Customers() {
                                     ))}
                                 </tbody>
                             </table>
+                            <Pagination page={tc.page} totalPages={tc.totalPages} totalItems={tc.totalItems} pageSize={tc.pageSize} onPageChange={tc.setPage} onPageSizeChange={tc.changePageSize} pageSizeOptions={tc.PAGE_SIZE_OPTIONS} />
+                            </>
                         )}
                     </div>
                 </div>

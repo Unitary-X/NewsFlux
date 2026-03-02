@@ -4,7 +4,7 @@ from datetime import date
 
 from app.api.dependencies import get_db, require_role
 from app.schemas.worker import OfflineSyncBatchRequest
-from app.models.models import DailyStock, CustomerSubscription, Newspaper, Customer
+from app.models.models import DailyStock, CustomerSubscription, Newspaper, Customer, DailyDelivery, WorkerAssignment
 
 router = APIRouter()
 
@@ -62,6 +62,7 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
         # The database (GENERATED ALWAYS AS) will automatically calculate `sold` on commit
 
     # 2. Resolve Delivery Updates
+    user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
     for delivery in payload.delivery_updates:
         sub = db.query(CustomerSubscription).filter(
             CustomerSubscription.tenant_id == tenant_id,
@@ -69,9 +70,24 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
         ).first()
         
         if sub:
-            # E.g., Worker marks a customer as not wanting paper today
-            # Real implementation would log this interaction state historically for billing
             sub.status = delivery.status
+
+        # Also record in daily_deliveries for historical tracking / billing deductions
+        existing_dd = db.query(DailyDelivery).filter(
+            DailyDelivery.tenant_id == tenant_id,
+            DailyDelivery.customer_id == delivery.customer_id,
+            DailyDelivery.date == today
+        ).first()
+        dd_status = "delivered" if delivery.status == 1 else "missed"
+        if existing_dd:
+            existing_dd.status = dd_status
+            existing_dd.worker_id = user_id
+        else:
+            db.add(DailyDelivery(
+                tenant_id=tenant_id, date=today,
+                customer_id=delivery.customer_id,
+                worker_id=user_id, status=dd_status
+            ))
 
     db.commit()
     return {"message": "Offline sync resolved successfully", "processed_stock": len(payload.stock_updates), "processed_deliveries": len(payload.delivery_updates)}

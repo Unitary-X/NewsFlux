@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 import { UserPlus, UserSquare2, Loader2, Pencil, Trash2, X, Search } from 'lucide-react';
+import useTableControls from '../../hooks/useTableControls';
+import { SortHeader, Pagination, BulkBar, SelectCheckbox } from '../../components/admin/TableControls';
 
 export default function Workers() {
     const { t } = useTranslation();
@@ -32,6 +34,8 @@ export default function Workers() {
         const q = search.toLowerCase();
         setFiltered(workers.filter(w => w.username.toLowerCase().includes(q)));
     }, [search, workers]);
+
+    const tc = useTableControls(filtered, { defaultSort: { key: 'username', dir: 'asc' } });
 
     const onSubmit = async (data) => {
         setIsAdding(true);
@@ -67,6 +71,17 @@ export default function Workers() {
         if (!confirm(t('workers.delete_confirm', { name }))) return;
         try {
             await api.delete(`/admin/workers/${id}`);
+            fetchWorkers();
+        } catch (err) {
+            alert(t('workers.delete_fail'));
+        }
+    };
+
+    const bulkDelete = async () => {
+        if (!confirm(`Delete ${tc.selected.size} worker(s)?`)) return;
+        try {
+            await Promise.all([...tc.selected].map(id => api.delete(`/admin/workers/${id}`)));
+            tc.clearSelection();
             fetchWorkers();
         } catch (err) {
             alert(t('workers.delete_fail'));
@@ -113,22 +128,26 @@ export default function Workers() {
                                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                             </div>
                         </div>
+                        <BulkBar count={tc.selected.size} onDelete={bulkDelete} onClear={tc.clearSelection} />
                         {isLoading ? (
                             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-indigo-500" /></div>
                         ) : filtered.length === 0 ? (
                             <div className="p-12 text-center text-slate-500">{t('workers.no_workers')}</div>
                         ) : (
+                            <>
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('workers.username')}</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('sidebar.agency_menu')}</th>
+                                        <th className="px-6 py-4 w-10"><SelectCheckbox checked={tc.selected.size === tc.paged.length && tc.paged.length > 0} onChange={tc.toggleSelectAll} /></th>
+                                        <SortHeader label={t('workers.username')} sortKey="username" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
+                                        <SortHeader label={t('sidebar.agency_menu')} sortKey="role" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
                                         <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map(worker => (
-                                        <tr key={worker.id} className="hover:bg-slate-50 transition-colors">
+                                    {tc.paged.map(worker => (
+                                        <tr key={worker.id} className={`hover:bg-slate-50 transition-colors ${tc.selected.has(worker.id) ? 'bg-blue-50/50' : ''}`}>
+                                            <td className="px-6 py-4"><SelectCheckbox checked={tc.selected.has(worker.id)} onChange={() => tc.toggleSelect(worker.id)} /></td>
                                             <td className="px-6 py-4 flex items-center gap-3">
                                                 <div className="p-2 bg-indigo-100 rounded-lg"><UserSquare2 className="w-4 h-4 text-indigo-600" /></div>
                                                 {editId === worker.id ? (
@@ -158,6 +177,8 @@ export default function Workers() {
                                     ))}
                                 </tbody>
                             </table>
+                            <Pagination page={tc.page} totalPages={tc.totalPages} totalItems={tc.totalItems} pageSize={tc.pageSize} onPageChange={tc.setPage} onPageSizeChange={tc.changePageSize} pageSizeOptions={tc.PAGE_SIZE_OPTIONS} />
+                            </>
                         )}
                     </div>
                 </div>

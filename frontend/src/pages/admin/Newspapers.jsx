@@ -3,6 +3,8 @@ import { useForm } from 'react-hook-form';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 import { Plus, Newspaper as NewsIcon, Loader2, Pencil, Trash2, X, Search } from 'lucide-react';
+import useTableControls from '../../hooks/useTableControls';
+import { SortHeader, Pagination, BulkBar, SelectCheckbox } from '../../components/admin/TableControls';
 
 export default function Newspapers() {
     const { t } = useTranslation();
@@ -32,6 +34,8 @@ export default function Newspapers() {
         const q = search.toLowerCase();
         setFiltered(newspapers.filter(p => p.name.toLowerCase().includes(q)));
     }, [search, newspapers]);
+
+    const tc = useTableControls(filtered, { defaultSort: { key: 'name', dir: 'asc' } });
 
     const onSubmit = async (data) => {
         setIsAdding(true);
@@ -68,6 +72,17 @@ export default function Newspapers() {
         if (!confirm(t('newspapers.delete_confirm', { name }))) return;
         try {
             await api.delete(`/admin/newspapers/${id}`);
+            fetchNewspapers();
+        } catch (err) {
+            alert(t('newspapers.delete_fail'));
+        }
+    };
+
+    const bulkDelete = async () => {
+        if (!confirm(`Delete ${tc.selected.size} newspaper(s)?`)) return;
+        try {
+            await Promise.all([...tc.selected].map(id => api.delete(`/admin/newspapers/${id}`)));
+            tc.clearSelection();
             fetchNewspapers();
         } catch (err) {
             alert(t('newspapers.delete_fail'));
@@ -116,22 +131,26 @@ export default function Newspapers() {
                                 <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                             </div>
                         </div>
+                        <BulkBar count={tc.selected.size} onDelete={bulkDelete} onClear={tc.clearSelection} />
                         {isLoading ? (
                             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
                         ) : filtered.length === 0 ? (
                             <div className="p-12 text-center text-slate-500">{t('newspapers.no_newspapers')}</div>
                         ) : (
+                            <>
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('newspapers.name')}</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('newspapers.base_price')}</th>
+                                        <th className="px-6 py-4 w-10"><SelectCheckbox checked={tc.selected.size === tc.paged.length && tc.paged.length > 0} onChange={tc.toggleSelectAll} /></th>
+                                        <SortHeader label={t('newspapers.name')} sortKey="name" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
+                                        <SortHeader label={t('newspapers.base_price')} sortKey="base_price" currentKey={tc.sortKey} currentDir={tc.sortDir} onSort={tc.toggleSort} />
                                         <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
-                                    {filtered.map(paper => (
-                                        <tr key={paper.id} className="hover:bg-slate-50 transition-colors">
+                                    {tc.paged.map(paper => (
+                                        <tr key={paper.id} className={`hover:bg-slate-50 transition-colors ${tc.selected.has(paper.id) ? 'bg-blue-50/50' : ''}`}>
+                                            <td className="px-6 py-4"><SelectCheckbox checked={tc.selected.has(paper.id)} onChange={() => tc.toggleSelect(paper.id)} /></td>
                                             <td className="px-6 py-4 flex items-center gap-3">
                                                 <div className="p-2 bg-blue-100 rounded-lg"><NewsIcon className="w-4 h-4 text-blue-600" /></div>
                                                 {editId === paper.id ? (
@@ -164,6 +183,8 @@ export default function Newspapers() {
                                     ))}
                                 </tbody>
                             </table>
+                            <Pagination page={tc.page} totalPages={tc.totalPages} totalItems={tc.totalItems} pageSize={tc.pageSize} onPageChange={tc.setPage} onPageSizeChange={tc.changePageSize} pageSizeOptions={tc.PAGE_SIZE_OPTIONS} />
+                            </>
                         )}
                     </div>
                 </div>

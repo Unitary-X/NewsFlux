@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Computed, Uuid, Boolean, Text
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Computed, Uuid, Boolean, Text, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -47,6 +47,7 @@ class CustomerSubscription(Base):
     quantity = Column(Integer, default=1)
     price = Column(DECIMAL(10, 2), nullable=True) # Overrides base_price if needed
     status = Column(Integer, default=1) # 1 = active, 0 = paused
+    subscription_type = Column(String(20), default="daily") # daily, weekly, monthly, yearly
 
 class DailyStock(Base):
     __tablename__ = "daily_stock"
@@ -123,3 +124,27 @@ class PlatformSettings(Base):
     setting_value = Column(Text, nullable=True)  # JSON-serialized value
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+class Salary(Base):
+    __tablename__ = "salaries"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
+    worker_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    month = Column(Integer, nullable=False)
+    year = Column(Integer, nullable=False)
+    base_salary = Column(DECIMAL(10, 2), default=0.00)
+    bonus = Column(DECIMAL(10, 2), default=0.00)
+    deductions = Column(DECIMAL(10, 2), default=0.00)
+    total_amount = Column(DECIMAL(10, 2), nullable=False)
+    status = Column(String(20), default="pending")  # pending, paid
+    notes = Column(Text, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+class DailyDelivery(Base):
+    __tablename__ = "daily_deliveries"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    customer_id = Column(Uuid, ForeignKey("customers.id"), nullable=False)
+    worker_id = Column(Uuid, ForeignKey("users.id"), nullable=True)
+    status = Column(String(20), default="pending")  # delivered, missed, pending

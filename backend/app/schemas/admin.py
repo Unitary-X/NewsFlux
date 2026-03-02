@@ -68,11 +68,13 @@ class SubscriptionCreate(BaseModel):
     newspaper_id: UUID
     quantity: int = 1
     price: Optional[float] = None
+    subscription_type: str = "daily"
 
 class SubscriptionUpdate(BaseModel):
     quantity: Optional[int] = None
     price: Optional[float] = None
     status: Optional[int] = None
+    subscription_type: Optional[str] = None
 
 class SubscriptionResponse(BaseModel):
     id: UUID
@@ -81,6 +83,7 @@ class SubscriptionResponse(BaseModel):
     quantity: int
     price: Optional[float]
     status: int
+    subscription_type: Optional[str] = "daily"
     tenant_id: UUID
     customer_name: Optional[str] = None
     newspaper_name: Optional[str] = None
@@ -119,3 +122,44 @@ class GenerateBillsRequest(BaseModel):
     month: int
     year: int
     delivery_fee: float = 0.0
+
+# --- SALARIES ---
+class SalaryCreate(BaseModel):
+    worker_id: UUID
+    month: int
+    year: int
+    base_salary: float = 0.0
+    bonus: float = 0.0
+    deductions: float = 0.0
+    notes: Optional[str] = None
+
+class SalaryUpdate(BaseModel):
+    base_salary: Optional[float] = None
+    bonus: Optional[float] = None
+    deductions: Optional[float] = None
+    notes: Optional[str] = None
+    status: Optional[str] = None
+
+class SalaryResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    worker_id: UUID
+    month: int
+    year: int
+    base_salary: float
+    bonus: float
+    deductions: float
+    total_amount: float
+    status: str
+    notes: Optional[str] = None
+    created_at: Optional[datetime] = None
+    worker_name: Optional[str] = None
+    model_config = ConfigDict(from_attributes=True)
+
+# --- PRICING GRID ---
+class PricingGridEntry(BaseModel):
+    newspaper_id: UUID
+    base_price: float
+
+class PricingGridUpdate(BaseModel):
+    prices: List[PricingGridEntry]

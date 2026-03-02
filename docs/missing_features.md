@@ -59,25 +59,23 @@ Audit date: March 2, 2026 (last updated after full codebase audit)
 - [x] **Search / Filter in tables** — All entity tables have search/filter
 - [x] **Announcement display** — Admin receives platform announcements (all + admin-targeted)
 - [x] **Google Drive Backup** — OAuth2 connect/disconnect, manual backup triggers (daily/monthly/yearly), browse backup files, 8 API endpoints
+- [x] **Analytics & Reports** — P&L dashboard, Stock Reconciliation, Worker Performance tracking, Daily/Weekly/Monthly report views (4-tab Reports page with charts)
+- [x] **Salary Management** — Full CRUD for worker salaries (base salary, bonus, deductions, status tracking, mark paid)
+- [x] **Billing deduction for failed deliveries** — Billing now queries DailyDelivery records and deducts missed delivery days from billable amount
+- [x] **Customer Subscription Types** — Daily / Weekly / Monthly / Yearly types on subscriptions with colored badges
+- [x] **Pricing Grid** — Bulk newspaper price editor page for agency-wide pricing management
+- [x] **Pagination** — Client-side pagination with configurable page sizes (10/25/50/100) on all entity tables
+- [x] **Column Sorting** — Clickable sortable column headers (asc/desc) on Customers, Workers, Newspapers, Subscriptions tables
+- [x] **Bulk Actions** — Multi-select checkboxes with bulk delete on Customers, Workers, Newspapers, Subscriptions tables
+- [x] **Daily Delivery Tracking** — DailyDelivery model records per-customer per-day delivery status (delivered/missed) via worker sync
 
 ### Missing — Analytics & Reports
-- [ ] **Profit / Loss dashboard** — Specified in docs, not built
-- [ ] **Stock Reconciliation reports** — Specified in docs, not built
-- [ ] **Worker Performance tracking** — No metrics on individual worker output
-- [ ] **Daily / Weekly / Monthly report views** — Specified in docs, not built
 
 ### Missing — Billing & Finance
-- [ ] **Salary management** — No model, API, or UI for worker compensation
-- [ ] **Billing deduction for failed deliveries** — Current calc is simple (price × quantity × days + delivery_fee)
 
 ### Missing — Subscriptions & Assignments
-- [ ] **Customer Types** — Docs specify Daily / Weekly / Monthly / Yearly — not implemented
-- [ ] **Pricing grids per agency** — Custom pricing per subscription exists, but no bulk pricing grid UI
 
 ### Missing — UX
-- [ ] **Pagination** — All data loaded at once
-- [ ] **Sorting** — No column sorting in tables
-- [ ] **Bulk actions** — No multi-select operations
 
 ---
 

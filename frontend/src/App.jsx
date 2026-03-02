@@ -10,6 +10,9 @@ import Customers from './pages/admin/Customers';
 import Subscriptions from './pages/admin/Subscriptions';
 import Assignments from './pages/admin/Assignments';
 import Billing from './pages/admin/Billing';
+import Salaries from './pages/admin/Salaries';
+import Reports from './pages/admin/Reports';
+import PricingGrid from './pages/admin/PricingGrid';
 import Backup from './pages/admin/Backup';
 import WorkerDashboard from './pages/worker/Dashboard';
 import SuperAdminDashboard from './pages/superadmin/Dashboard';
@@ -68,6 +71,9 @@ function App() {
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="assignments" element={<Assignments />} />
             <Route path="billing" element={<Billing />} />
+            <Route path="salaries" element={<Salaries />} />
+            <Route path="reports" element={<Reports />} />
+            <Route path="pricing" element={<PricingGrid />} />
             <Route path="backup" element={<Backup />} />
           </Route>
 

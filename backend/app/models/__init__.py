@@ -11,6 +11,8 @@ from .models import (
     BillingPlan,
     AgencyTemplate,
     Announcement,
-    PlatformSettings
+    PlatformSettings,
+    Salary,
+    DailyDelivery
 )
 

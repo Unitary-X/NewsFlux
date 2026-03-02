@@ -9,7 +9,8 @@ import uuid as uuid_mod
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
     Newspaper, User, Customer, DailyStock, 
-    CustomerSubscription, WorkerAssignment, Invoice, Agency
+    CustomerSubscription, WorkerAssignment, Invoice, Agency,
+    Salary, DailyDelivery
 )
 from app.schemas.admin import (
     NewspaperCreate, NewspaperUpdate, NewspaperResponse,
@@ -18,6 +19,8 @@ from app.schemas.admin import (
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     AssignmentCreate, AssignmentResponse,
     InvoiceResponse, GenerateBillsRequest,
+    SalaryCreate, SalaryUpdate, SalaryResponse,
+    PricingGridUpdate,
 )
 from app.core.security import get_password_hash
 
@@ -380,6 +383,7 @@ def list_subscriptions(request: Request, db: Session = Depends(get_db)):
             "quantity": s.quantity,
             "price": float(s.price) if s.price else None,
             "status": s.status,
+            "subscription_type": s.subscription_type or "daily",
             "tenant_id": str(s.tenant_id),
             "customer_name": cust.name if cust else None,
             "newspaper_name": paper.name if paper else None,
@@ -410,7 +414,8 @@ def create_subscription(request: Request, data: SubscriptionCreate, db: Session 
         newspaper_id=data.newspaper_id,
         quantity=data.quantity,
         price=data.price,
-        status=1
+        status=1,
+        subscription_type=data.subscription_type or "daily",
     )
     db.add(sub)
     db.commit()
@@ -422,6 +427,7 @@ def create_subscription(request: Request, data: SubscriptionCreate, db: Session 
         "quantity": sub.quantity,
         "price": float(sub.price) if sub.price else None,
         "status": sub.status,
+        "subscription_type": sub.subscription_type or "daily",
         "customer_name": cust.name,
         "newspaper_name": paper.name,
     }
@@ -440,6 +446,8 @@ def update_subscription(request: Request, sub_id: str, data: SubscriptionUpdate,
         sub.price = data.price
     if data.status is not None:
         sub.status = data.status
+    if data.subscription_type is not None:
+        sub.subscription_type = data.subscription_type
     db.commit()
     return {"status": "updated"}
 
@@ -567,7 +575,17 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             paper = db.query(Newspaper).filter(Newspaper.id == sub.newspaper_id).first()
             if paper:
                 price = float(sub.price) if sub.price else float(paper.base_price)
-                total += price * sub.quantity * days_in_month
+                # Deduct for missed deliveries if daily delivery records exist
+                from sqlalchemy import extract
+                missed_days = db.query(func.count(DailyDelivery.id)).filter(
+                    DailyDelivery.tenant_id == tid,
+                    DailyDelivery.customer_id == cust.id,
+                    DailyDelivery.status == "missed",
+                    extract('month', DailyDelivery.date) == month,
+                    extract('year', DailyDelivery.date) == year
+                ).scalar() or 0
+                billable_days = days_in_month - missed_days
+                total += price * sub.quantity * billable_days
 
         total += delivery_fee
 
@@ -625,6 +643,384 @@ def mark_invoice_paid(request: Request, invoice_id: str, db: Session = Depends(g
     inv.status = "paid"
     db.commit()
     return {"status": "paid"}
+
+
+# ──────────────────────────────────────────────
+# SALARY MANAGEMENT
+# ──────────────────────────────────────────────
+
+@router.get("/salaries", dependencies=[Depends(require_role(["admin"]))])
+def list_salaries(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
+    tid = request.state.tenant_id
+    q = db.query(Salary).filter(Salary.tenant_id == tid)
+    if month:
+        q = q.filter(Salary.month == month)
+    if year:
+        q = q.filter(Salary.year == year)
+    salaries = q.order_by(Salary.year.desc(), Salary.month.desc()).all()
+    result = []
+    for s in salaries:
+        worker = db.query(User).filter(User.id == s.worker_id).first()
+        result.append({
+            "id": str(s.id),
+            "tenant_id": str(s.tenant_id),
+            "worker_id": str(s.worker_id),
+            "month": s.month,
+            "year": s.year,
+            "base_salary": float(s.base_salary),
+            "bonus": float(s.bonus),
+            "deductions": float(s.deductions),
+            "total_amount": float(s.total_amount),
+            "status": s.status,
+            "notes": s.notes,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "worker_name": worker.username if worker else None,
+        })
+    return result
+
+
+@router.post("/salaries", dependencies=[Depends(require_role(["admin"]))])
+def create_salary(request: Request, data: SalaryCreate, db: Session = Depends(get_db)):
+    tid = request.state.tenant_id
+    worker = db.query(User).filter(User.id == data.worker_id, User.tenant_id == tid, User.role == "worker").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    existing = db.query(Salary).filter(
+        Salary.tenant_id == tid, Salary.worker_id == data.worker_id,
+        Salary.month == data.month, Salary.year == data.year
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Salary record already exists for this worker/month")
+    total = data.base_salary + data.bonus - data.deductions
+    salary = Salary(
+        tenant_id=tid, worker_id=data.worker_id,
+        month=data.month, year=data.year,
+        base_salary=data.base_salary, bonus=data.bonus,
+        deductions=data.deductions, total_amount=round(total, 2),
+        notes=data.notes, status="pending"
+    )
+    db.add(salary)
+    db.commit()
+    db.refresh(salary)
+    return {
+        "id": str(salary.id), "total_amount": float(salary.total_amount),
+        "status": "created", "worker_name": worker.username,
+    }
+
+
+@router.put("/salaries/{salary_id}", dependencies=[Depends(require_role(["admin"]))])
+def update_salary(request: Request, salary_id: str, data: SalaryUpdate, db: Session = Depends(get_db)):
+    tid = request.state.tenant_id
+    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
+    if not salary:
+        raise HTTPException(status_code=404, detail="Salary not found")
+    if data.base_salary is not None:
+        salary.base_salary = data.base_salary
+    if data.bonus is not None:
+        salary.bonus = data.bonus
+    if data.deductions is not None:
+        salary.deductions = data.deductions
+    if data.notes is not None:
+        salary.notes = data.notes
+    if data.status is not None:
+        salary.status = data.status
+    salary.total_amount = round(float(salary.base_salary) + float(salary.bonus) - float(salary.deductions), 2)
+    db.commit()
+    return {"status": "updated"}
+
+
+@router.put("/salaries/{salary_id}/pay", dependencies=[Depends(require_role(["admin"]))])
+def mark_salary_paid(request: Request, salary_id: str, db: Session = Depends(get_db)):
+    tid = request.state.tenant_id
+    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
+    if not salary:
+        raise HTTPException(status_code=404, detail="Salary not found")
+    salary.status = "paid"
+    db.commit()
+    return {"status": "paid"}
+
+
+@router.delete("/salaries/{salary_id}", dependencies=[Depends(require_role(["admin"]))])
+def delete_salary(request: Request, salary_id: str, db: Session = Depends(get_db)):
+    tid = request.state.tenant_id
+    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
+    if not salary:
+        raise HTTPException(status_code=404, detail="Salary not found")
+    db.delete(salary)
+    db.commit()
+    return {"status": "deleted"}
+
+
+# ──────────────────────────────────────────────
+# PRICING GRID
+# ──────────────────────────────────────────────
+
+@router.get("/pricing-grid", dependencies=[Depends(require_role(["admin"]))])
+def get_pricing_grid(request: Request, db: Session = Depends(get_db)):
+    """Get all newspaper base prices for bulk editing."""
+    tid = request.state.tenant_id
+    papers = db.query(Newspaper).filter(Newspaper.tenant_id == tid).order_by(Newspaper.name).all()
+    return [{
+        "newspaper_id": str(p.id),
+        "name": p.name,
+        "base_price": float(p.base_price),
+    } for p in papers]
+
+
+@router.put("/pricing-grid", dependencies=[Depends(require_role(["admin"]))])
+def update_pricing_grid(request: Request, data: PricingGridUpdate, db: Session = Depends(get_db)):
+    """Bulk update newspaper base prices."""
+    tid = request.state.tenant_id
+    updated = 0
+    for entry in data.prices:
+        paper = db.query(Newspaper).filter(
+            Newspaper.id == entry.newspaper_id, Newspaper.tenant_id == tid
+        ).first()
+        if paper:
+            paper.base_price = entry.base_price
+            updated += 1
+    db.commit()
+    return {"status": "updated", "count": updated}
+
+
+# ──────────────────────────────────────────────
+# REPORTS & ANALYTICS
+# ──────────────────────────────────────────────
+
+@router.get("/reports/profit-loss", dependencies=[Depends(require_role(["admin"]))])
+def profit_loss_report(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
+    """Profit & Loss report for a given month."""
+    tid = request.state.tenant_id
+    now = date.today()
+    month = month or now.month
+    year = year or now.year
+    days = monthrange(year, month)[1]
+
+    # Revenue: sum of all invoices for the month
+    invoices = db.query(Invoice).filter(
+        Invoice.tenant_id == tid, Invoice.month == month, Invoice.year == year
+    ).all()
+    total_revenue = sum(float(i.total_amount) for i in invoices)
+    collected = sum(float(i.total_amount) for i in invoices if i.status == "paid")
+    pending = total_revenue - collected
+
+    # Cost: total newspapers purchased (taken * base_price) across all days
+    from sqlalchemy import extract
+    stocks = db.query(DailyStock).filter(
+        DailyStock.tenant_id == tid,
+        extract('month', DailyStock.date) == month,
+        extract('year', DailyStock.date) == year
+    ).all()
+    total_purchase_cost = 0.0
+    total_taken = 0
+    total_returned = 0
+    total_sold = 0
+    for s in stocks:
+        paper = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+        if paper:
+            total_purchase_cost += float(paper.base_price) * (s.taken or 0)
+        total_taken += s.taken or 0
+        total_returned += s.returned or 0
+        total_sold += (s.taken or 0) - (s.returned or 0)
+
+    # Salary expense
+    salaries = db.query(Salary).filter(
+        Salary.tenant_id == tid, Salary.month == month, Salary.year == year
+    ).all()
+    total_salary_expense = sum(float(s.total_amount) for s in salaries)
+
+    total_expenses = total_purchase_cost + total_salary_expense
+    net_profit = total_revenue - total_expenses
+
+    return {
+        "month": month, "year": year, "days": days,
+        "revenue": {"total": round(total_revenue, 2), "collected": round(collected, 2), "pending": round(pending, 2)},
+        "expenses": {
+            "purchase_cost": round(total_purchase_cost, 2),
+            "salary": round(total_salary_expense, 2),
+            "total": round(total_expenses, 2),
+        },
+        "stock": {"taken": total_taken, "returned": total_returned, "sold": total_sold},
+        "net_profit": round(net_profit, 2),
+        "invoices_count": len(invoices),
+        "salaries_count": len(salaries),
+    }
+
+
+@router.get("/reports/stock-reconciliation", dependencies=[Depends(require_role(["admin"]))])
+def stock_reconciliation(request: Request, target_date: str = None, db: Session = Depends(get_db)):
+    """Compare stock entries with subscription expectations for a date."""
+    tid = request.state.tenant_id
+    d = date.fromisoformat(target_date) if target_date else date.today()
+
+    papers = db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()
+    result = []
+    for paper in papers:
+        stock = db.query(DailyStock).filter(
+            DailyStock.tenant_id == tid, DailyStock.newspaper_id == paper.id, DailyStock.date == d
+        ).first()
+        # Expected = sum of active subscription quantities for this newspaper
+        expected = db.query(func.coalesce(func.sum(CustomerSubscription.quantity), 0)).filter(
+            CustomerSubscription.tenant_id == tid,
+            CustomerSubscription.newspaper_id == paper.id,
+            CustomerSubscription.status == 1
+        ).scalar() or 0
+
+        taken = stock.taken if stock else 0
+        returned = stock.returned if stock else 0
+        sold = taken - returned
+        discrepancy = sold - int(expected)
+
+        result.append({
+            "newspaper_id": str(paper.id),
+            "newspaper_name": paper.name,
+            "base_price": float(paper.base_price),
+            "expected": int(expected),
+            "taken": taken,
+            "returned": returned,
+            "sold": sold,
+            "discrepancy": discrepancy,
+            "status": "match" if discrepancy == 0 else ("surplus" if discrepancy > 0 else "deficit"),
+        })
+
+    total_expected = sum(r["expected"] for r in result)
+    total_sold = sum(r["sold"] for r in result)
+    return {
+        "date": d.isoformat(),
+        "newspapers": result,
+        "summary": {
+            "total_expected": total_expected,
+            "total_sold": total_sold,
+            "total_discrepancy": total_sold - total_expected,
+            "newspapers_matched": sum(1 for r in result if r["status"] == "match"),
+            "newspapers_surplus": sum(1 for r in result if r["status"] == "surplus"),
+            "newspapers_deficit": sum(1 for r in result if r["status"] == "deficit"),
+        }
+    }
+
+
+@router.get("/reports/worker-performance", dependencies=[Depends(require_role(["admin"]))])
+def worker_performance(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
+    """Worker performance metrics."""
+    tid = request.state.tenant_id
+    now = date.today()
+    month = month or now.month
+    year = year or now.year
+
+    workers = db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()
+    result = []
+    for w in workers:
+        # Assignments count
+        assignments_count = db.query(func.count(WorkerAssignment.id)).filter(
+            WorkerAssignment.tenant_id == tid, WorkerAssignment.worker_id == w.id
+        ).scalar() or 0
+
+        # Deliveries for the month
+        from sqlalchemy import extract
+        deliveries = db.query(DailyDelivery).filter(
+            DailyDelivery.tenant_id == tid, DailyDelivery.worker_id == w.id,
+            extract('month', DailyDelivery.date) == month,
+            extract('year', DailyDelivery.date) == year
+        ).all()
+        total_deliveries = len(deliveries)
+        delivered = sum(1 for d in deliveries if d.status == "delivered")
+        missed = sum(1 for d in deliveries if d.status == "missed")
+        delivery_rate = round(delivered / total_deliveries * 100, 1) if total_deliveries > 0 else 0.0
+
+        # Salary for the month
+        salary = db.query(Salary).filter(
+            Salary.tenant_id == tid, Salary.worker_id == w.id,
+            Salary.month == month, Salary.year == year
+        ).first()
+
+        result.append({
+            "worker_id": str(w.id),
+            "worker_name": w.username,
+            "assignments": assignments_count,
+            "total_deliveries": total_deliveries,
+            "delivered": delivered,
+            "missed": missed,
+            "delivery_rate": delivery_rate,
+            "salary_amount": float(salary.total_amount) if salary else 0.0,
+            "salary_status": salary.status if salary else "not_set",
+        })
+
+    result.sort(key=lambda x: x["delivery_rate"], reverse=True)
+    return {"month": month, "year": year, "workers": result}
+
+
+@router.get("/reports/summary", dependencies=[Depends(require_role(["admin"]))])
+def report_summary(request: Request, period: str = "daily", target_date: str = None, db: Session = Depends(get_db)):
+    """Daily / Weekly / Monthly summary report."""
+    tid = request.state.tenant_id
+    d = date.fromisoformat(target_date) if target_date else date.today()
+
+    if period == "daily":
+        start_date = d
+        end_date = d
+    elif period == "weekly":
+        start_date = d - timedelta(days=d.weekday())
+        end_date = start_date + timedelta(days=6)
+    elif period == "monthly":
+        start_date = d.replace(day=1)
+        end_date = d.replace(day=monthrange(d.year, d.month)[1])
+    else:
+        start_date = d
+        end_date = d
+
+    # Stock data for the period
+    stocks = db.query(DailyStock).filter(
+        DailyStock.tenant_id == tid,
+        DailyStock.date >= start_date,
+        DailyStock.date <= end_date
+    ).all()
+
+    total_taken = sum(s.taken or 0 for s in stocks)
+    total_returned = sum(s.returned or 0 for s in stocks)
+    total_sold = total_taken - total_returned
+
+    # Revenue for the period
+    revenue = 0.0
+    for s in stocks:
+        paper = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+        if paper:
+            revenue += float(paper.base_price) * ((s.taken or 0) - (s.returned or 0))
+
+    # Daily breakdown
+    daily_data = {}
+    for s in stocks:
+        day_key = s.date.isoformat()
+        if day_key not in daily_data:
+            daily_data[day_key] = {"date": day_key, "taken": 0, "returned": 0, "sold": 0, "revenue": 0.0}
+        daily_data[day_key]["taken"] += s.taken or 0
+        daily_data[day_key]["returned"] += s.returned or 0
+        daily_data[day_key]["sold"] += (s.taken or 0) - (s.returned or 0)
+        paper = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+        if paper:
+            daily_data[day_key]["revenue"] += float(paper.base_price) * ((s.taken or 0) - (s.returned or 0))
+
+    for k in daily_data:
+        daily_data[k]["revenue"] = round(daily_data[k]["revenue"], 2)
+
+    # Deliveries for the period
+    deliveries = db.query(DailyDelivery).filter(
+        DailyDelivery.tenant_id == tid,
+        DailyDelivery.date >= start_date,
+        DailyDelivery.date <= end_date
+    ).all()
+    total_delivery_count = len(deliveries)
+    delivered_count = sum(1 for d in deliveries if d.status == "delivered")
+    missed_count = sum(1 for d in deliveries if d.status == "missed")
+
+    return {
+        "period": period,
+        "start_date": start_date.isoformat(),
+        "end_date": end_date.isoformat(),
+        "stock": {"taken": total_taken, "returned": total_returned, "sold": total_sold},
+        "revenue": round(revenue, 2),
+        "deliveries": {"total": total_delivery_count, "delivered": delivered_count, "missed": missed_count},
+        "daily_breakdown": sorted(daily_data.values(), key=lambda x: x["date"]),
+    }
 
 
 # ──────────────────────────────────────────────
