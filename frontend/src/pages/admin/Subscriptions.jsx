@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Plus, Trash2, Search, BookOpen } from 'lucide-react';
 
 export default function Subscriptions() {
+    const { t } = useTranslation();
     const [subs, setSubs] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [newspapers, setNewspapers] = useState([]);
@@ -64,12 +66,12 @@ export default function Subscriptions() {
     };
 
     const deleteSub = async (id) => {
-        if (!confirm('Delete this subscription?')) return;
+        if (!confirm(t('subscriptions.delete_confirm'))) return;
         try {
             await api.delete(`/admin/subscriptions/${id}`);
             fetchAll();
         } catch (err) {
-            alert('Failed to delete subscription');
+            alert(t('subscriptions.delete_fail'));
         }
     };
 
@@ -81,42 +83,42 @@ export default function Subscriptions() {
         <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-end mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Subscriptions</h1>
-                    <p className="text-slate-500 mt-2">Assign newspapers to customers with quantities and pricing.</p>
+                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">{t('subscriptions.title')}</h1>
+                    <p className="text-slate-500 mt-2">{t('subscriptions.subtitle')}</p>
                 </div>
                 <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
-                    <Plus className="w-4 h-4" /> New Subscription
+                    <Plus className="w-4 h-4" /> {t('subscriptions.add')}
                 </button>
             </div>
 
             {/* Create Form */}
             {showForm && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-blue-500" /> New Subscription</h2>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><BookOpen className="w-5 h-5 text-blue-500" /> {t('subscriptions.add')}</h2>
                     <form onSubmit={createSub} className="grid grid-cols-1 md:grid-cols-5 gap-4 items-end">
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Customer</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('subscriptions.customer')}</label>
                             <select value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })} required className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="">Select...</option>
+                                <option value="">{t('common.search_placeholder')}</option>
                                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Newspaper</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('subscriptions.newspaper')}</label>
                             <select value={form.newspaper_id} onChange={e => setForm({ ...form, newspaper_id: e.target.value })} required className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none">
-                                <option value="">Select...</option>
+                                <option value="">{t('common.search_placeholder')}</option>
                                 {newspapers.map(n => <option key={n.id} value={n.id}>{n.name} (₹{Number(n.base_price).toFixed(2)})</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Quantity</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('subscriptions.quantity')}</label>
                             <input type="number" min="1" value={form.quantity} onChange={e => setForm({ ...form, quantity: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Custom Price (optional)</label>
-                            <input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder="Uses base price" className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('subscriptions.custom_price')}</label>
+                            <input type="number" step="0.01" value={form.price} onChange={e => setForm({ ...form, price: e.target.value })} placeholder={t('subscriptions.price')} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                         </div>
-                        <button type="submit" className="bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 rounded-lg transition-colors">Create</button>
+                        <button type="submit" className="bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 rounded-lg transition-colors">{t('subscriptions.create')}</button>
                     </form>
                 </div>
             )}
@@ -125,24 +127,24 @@ export default function Subscriptions() {
             <div className="mb-4">
                 <div className="relative max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by customer or newspaper..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none" />
                 </div>
             </div>
 
             {/* Table */}
             <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                 {filtered.length === 0 ? (
-                    <div className="p-12 text-center text-slate-500">No subscriptions found. Create one to get started.</div>
+                    <div className="p-12 text-center text-slate-500">{t('subscriptions.no_subs')}</div>
                 ) : (
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                <th className="px-6 py-4 font-semibold text-slate-600">Customer</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600">Newspaper</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">Qty</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600 text-right">Price</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">Status</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600 text-right">Actions</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600">{t('subscriptions.customer')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600">{t('subscriptions.newspaper')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">{t('subscriptions.quantity')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('subscriptions.price')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">{t('subscriptions.status')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -154,7 +156,7 @@ export default function Subscriptions() {
                                     <td className="px-6 py-4 text-right text-slate-700">{sub.price ? `₹${Number(sub.price).toFixed(2)}` : 'Base'}</td>
                                     <td className="px-6 py-4 text-center">
                                         <button onClick={() => toggleStatus(sub)} className={`px-3 py-1 rounded-full text-xs font-semibold ${sub.status === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
-                                            {sub.status === 1 ? 'Active' : 'Paused'}
+                                            {sub.status === 1 ? t('billing.status_pending') : 'Paused'}
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-right">
