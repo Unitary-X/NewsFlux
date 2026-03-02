@@ -69,6 +69,17 @@ export default function StockTable() {
         }
     };
 
+    // Calculate total income
+    const calculateTotalIncome = () => {
+        return newspapers.reduce((total, paper) => {
+            const currentStock = stock[paper.id] || { taken: 0, returned: 0 };
+            const sold = Math.max(0, (currentStock.taken || 0) - (currentStock.returned || 0));
+            return total + (sold * paper.base_price);
+        }, 0);
+    };
+
+    const totalIncome = calculateTotalIncome();
+
     return (
         <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-end mb-8">
@@ -118,12 +129,14 @@ export default function StockTable() {
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-48">Quantity Taken</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-48">Quantity Returned</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-32 text-right">Sold (Net)</th>
+                                    <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-40 text-right">Income</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
                                 {newspapers.map(paper => {
                                     const currentStock = stock[paper.id] || { taken: 0, returned: 0 };
                                     const sold = Math.max(0, (currentStock.taken || 0) - (currentStock.returned || 0));
+                                    const income = sold * paper.base_price;
 
                                     return (
                                         <tr key={paper.id} className="hover:bg-slate-50/50 transition-colors">
@@ -156,10 +169,27 @@ export default function StockTable() {
                                                     {sold}
                                                 </span>
                                             </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <span className={`inline-flex items-center justify-center font-semibold text-lg ${income > 0 ? 'text-blue-600' : 'text-slate-400'}`}>
+                                                    ₹{income.toFixed(2)}
+                                                </span>
+                                            </td>
                                         </tr>
                                     )
                                 })}
                             </tbody>
+                            <tfoot>
+                                <tr className="bg-gradient-to-r from-blue-50 to-emerald-50 border-t-2 border-blue-200">
+                                    <td colSpan="4" className="px-6 py-4 text-right">
+                                        <span className="text-lg font-bold text-slate-700">Total Income:</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className="inline-flex items-center justify-center text-2xl font-bold text-emerald-600">
+                                            ₹{totalIncome.toFixed(2)}
+                                        </span>
+                                    </td>
+                                </tr>
+                            </tfoot>
                         </table>
                     </div>
                 )}
