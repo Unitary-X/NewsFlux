@@ -19,6 +19,7 @@ import SuperAdminAuditLogs from './pages/superadmin/AuditLogs';
 import SuperAdminSystemHealth from './pages/superadmin/SystemHealth';
 import SuperAdminSettings from './pages/superadmin/Settings';
 import SuperAdminAnnouncements from './pages/superadmin/Announcements';
+import SuperAdminBackup from './pages/superadmin/Backup';
 import AdminLayout from './components/admin/AdminLayout';
 import SuperAdminLayout from './components/superadmin/SuperAdminLayout';
 import ImpersonationBanner from './components/ImpersonationBanner';
@@ -98,6 +99,7 @@ function App() {
             <Route path="audit-logs" element={<SuperAdminAuditLogs />} />
             <Route path="system" element={<SuperAdminSystemHealth />} />
             <Route path="settings" element={<SuperAdminSettings />} />
+            <Route path="backup" element={<SuperAdminBackup />} />
           </Route>
 
           {/* Default Route */}

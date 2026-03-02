@@ -728,3 +728,130 @@ def delete_setting(request: Request, setting_key: str, db: Session = Depends(get
     db.delete(setting)
     db.commit()
     return {"detail": "Setting deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# GOOGLE DRIVE BACKUP (per-agency, triggered by super admin)
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/backup/agencies", dependencies=[Depends(require_role(["super_admin"]))])
+def list_agencies_backup_status(db: Session = Depends(get_db)):
+    """List all agencies with their Google Drive backup connection status."""
+    agencies = db.query(Agency).order_by(Agency.name).all()
+    return [
+        {
+            "id": str(a.id),
+            "name": a.name,
+            "status": a.status,
+            "gdrive_connected": a.gdrive_refresh_token is not None,
+            "gdrive_connected_at": a.gdrive_connected_at.isoformat() if a.gdrive_connected_at else None,
+        }
+        for a in agencies
+    ]
+
+
+@router.get("/backup/{agency_id}/files/{subfolder}", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_list_backup_files(agency_id: str, subfolder: str, db: Session = Depends(get_db)):
+    """List backup files for a specific agency (super admin)."""
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Agency not found or Google Drive not connected")
+
+    folder_map = {"daily": "Daily Updates", "monthly": "Monthly Analysis", "yearly": "Yearly Analysis"}
+    folder_name = folder_map.get(subfolder)
+    if not folder_name:
+        raise HTTPException(status_code=400, detail="Invalid subfolder. Use: daily, monthly, yearly")
+
+    from app.services.gdrive_service import list_backup_files
+    return list_backup_files(agency.gdrive_refresh_token, agency.name, folder_name)
+
+
+@router.post("/backup/{agency_id}/trigger", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_trigger_daily_backup(agency_id: str, db: Session = Depends(get_db)):
+    """Trigger a daily backup for a specific agency."""
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Agency not found or Google Drive not connected")
+
+    from app.services.excel_export import generate_daily_stock_excel, generate_daily_deliveries_excel
+    from app.services.gdrive_service import upload_file
+
+    target_date = date.today()
+    date_str = target_date.isoformat()
+    results = []
+
+    for gen_fn, fname in [
+        (generate_daily_stock_excel, f"{date_str}_daily_stock.xlsx"),
+        (generate_daily_deliveries_excel, f"{date_str}_deliveries.xlsx"),
+    ]:
+        try:
+            file_bytes = gen_fn(db, agency.id, target_date)
+            r = upload_file(agency.gdrive_refresh_token, agency.name, "Daily Updates", fname, file_bytes)
+            results.append({"file": fname, "status": "uploaded", **r})
+        except Exception as e:
+            results.append({"file": fname, "status": "failed", "error": str(e)})
+
+    return {"agency": agency.name, "date": date_str, "results": results}
+
+
+@router.post("/backup/{agency_id}/trigger-monthly", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_trigger_monthly_backup(agency_id: str, month: int = None, year: int = None, db: Session = Depends(get_db)):
+    """Trigger a monthly backup for a specific agency."""
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Agency not found or Google Drive not connected")
+
+    from app.services.excel_export import generate_monthly_revenue_excel, generate_monthly_subscriptions_excel, generate_monthly_invoices_excel
+    from app.services.gdrive_service import upload_file
+
+    today = date.today()
+    if not month:
+        prev = today.replace(day=1) - timedelta(days=1)
+        month, year = prev.month, prev.year
+    if not year:
+        year = today.year
+
+    month_str = f"{year}-{month:02d}"
+    results = []
+
+    for gen_fn, fname in [
+        (generate_monthly_revenue_excel, f"{month_str}_revenue_report.xlsx"),
+        (generate_monthly_subscriptions_excel, f"{month_str}_subscription_summary.xlsx"),
+        (generate_monthly_invoices_excel, f"{month_str}_invoice_report.xlsx"),
+    ]:
+        try:
+            file_bytes = gen_fn(db, agency.id, month, year)
+            r = upload_file(agency.gdrive_refresh_token, agency.name, "Monthly Analysis", fname, file_bytes)
+            results.append({"file": fname, "status": "uploaded", **r})
+        except Exception as e:
+            results.append({"file": fname, "status": "failed", "error": str(e)})
+
+    return {"agency": agency.name, "period": month_str, "results": results}
+
+
+@router.post("/backup/{agency_id}/trigger-yearly", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_trigger_yearly_backup(agency_id: str, year: int = None, db: Session = Depends(get_db)):
+    """Trigger a yearly backup for a specific agency."""
+    uid = _parse_uuid(agency_id)
+    agency = db.query(Agency).filter(Agency.id == uid).first()
+    if not agency or not agency.gdrive_refresh_token:
+        raise HTTPException(status_code=400, detail="Agency not found or Google Drive not connected")
+
+    from app.services.excel_export import generate_yearly_report_excel
+    from app.services.gdrive_service import upload_file
+
+    if not year:
+        year = date.today().year - 1
+
+    results = []
+    try:
+        yearly_bytes = generate_yearly_report_excel(db, agency.id, year)
+        r = upload_file(agency.gdrive_refresh_token, agency.name, "Yearly Analysis", f"{year}_annual_report.xlsx", yearly_bytes)
+        results.append({"file": f"{year}_annual_report.xlsx", "status": "uploaded", **r})
+    except Exception as e:
+        results.append({"file": f"{year}_annual_report.xlsx", "status": "failed", "error": str(e)})
+
+    return {"agency": agency.name, "year": year, "results": results}
