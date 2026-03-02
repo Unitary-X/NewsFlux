@@ -1,6 +1,6 @@
 # NewsFlux: Missing Features & Gap Analysis
 
-Audit date: March 1, 2026 (last updated after full codebase audit)
+Audit date: March 2, 2026 (last updated after full codebase audit)
 
 ---
 
@@ -28,6 +28,9 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 - [x] **Settings page** — 4 tabs: General settings, Agency Templates, Billing Plans, Admin Management (super admin CRUD)
 - [x] **Super Admin user management** — Create/list/delete super admin accounts (cannot delete last one)
 - [x] **Audit logging in backend** — Impersonation events logged; middleware tracks APM metrics
+- [x] **Backup Management** — Per-agency Google Drive backup management (view files, trigger daily/monthly/yearly backups), Backup All agencies button with per-agency results
+- [x] **Full Database Backup & Restore** — Export full DB as JSON or SQL (pure-Python INSERT generator), upload/restore from JSON or SQL files, DB stats dashboard with row counts per table
+- [x] **Super Admin Google Drive Backup** — OAuth2 connect/disconnect for SA's own Drive, backup entire DB as JSON to Drive
 
 ### Missing
 - [ ] **Stripe/Razorpay payment integration** — Billing plans exist but no actual payment processing
@@ -90,11 +93,12 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 - [x] Background sync when reconnected (batch POST to `/worker/offline-sync`)
 - [x] Announcement display — Worker receives platform announcements (all + worker-targeted)
 
+- [x] **i18n (English + Tamil)** — Full bilingual support across all worker pages (sidebar, dashboard, stock entry, customer list)
+
 ### Missing
 - [ ] **My Sales dashboard** — Docs specify worker sees personal sales metrics
 - [ ] **My Salary view** — Docs specify worker sees salary / commission info
 - [ ] **Today's Route View** — Docs specify ordered route map — current shows flat unordered list
-- [ ] **i18n in worker pages** — Worker UI is English-only (sidebar and login have Tamil)
 
 ---
 
@@ -106,7 +110,7 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 - [x] Agency registration (creates tenant + admin, optional template seeding)
 - [x] Token persistence in localStorage
 - [x] TenantMiddleware for data isolation (converts UUID strings, validates tenant_id)
-- [x] i18n setup (English + Tamil) — Login, admin sidebar, superadmin sidebar, agencies page all translated
+- [x] i18n setup (English + Tamil) — Full coverage across Login, all admin pages, all worker pages (Super Admin is English-only by design)
 - [x] **Impersonation support** — AuthContext tracks `impersonating`, `original_user_id`, impersonation banner UI
 - [x] **APM metrics collection** — Middleware records latency (ms) and status codes per request
 - [x] **Audit logging** — Impersonation events written to audit_logs table
@@ -114,7 +118,7 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 ### Missing
 - [ ] **Password reset** — No endpoint or UI
 - [ ] **Session timeout** — Token set to 30 days, no refresh token mechanism
-- [ ] **Full i18n coverage** — Worker pages, some admin pages still have hardcoded English strings
+- [x] **Full i18n coverage** — All admin and worker pages translated (English + Tamil); Super Admin is English-only by design
 - [ ] **Comprehensive audit logging** — Only impersonation logged; CRUD operations not writing audit events
 - [ ] **PWA Service Worker** — `manifest.json` exists but no actual service worker for true offline caching
 - [ ] **Form validation** — Basic alerts only, no inline field-level validation (e.g. react-hook-form)
@@ -139,7 +143,7 @@ Audit date: March 1, 2026 (last updated after full codebase audit)
 
 ### Lower Priority (Polish & Scale) — Partially Done
 10. ~~Search / Filter in all tables~~ ✅ (Pagination still missing)
-11. i18n across all pages (partially done — admin/superadmin sidebars + login + agencies translated)
+11. ~~i18n across all pages~~ ✅ (full coverage: admin + worker pages in EN + Tamil; Super Admin English-only by design)
 12. Salary management
 13. PWA service worker
 14. Password reset flow
