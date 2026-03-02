@@ -113,7 +113,24 @@
         "status_pending": "Pending",
         "status_paid": "Paid",
         "mark_paid": "Mark Paid",
-        "all_statuses": "All"
+        "all_statuses": "All",
+        "update_fail": "Failed to update invoice"
+    },
+    "assignments": {
+        "title": "Worker Assignments",
+        "subtitle": "Assign customers to delivery workers with route ordering",
+        "add": "New Assignment",
+        "form_title": "Assign Customer to Worker",
+        "worker": "Worker",
+        "customer": "Customer",
+        "route_order": "Route Order",
+        "assign": "Assign",
+        "no_assignments": "No assignments found. Create one to assign customers to workers.",
+        "customer_assigned": "customer assigned",
+        "search_placeholder": "Search by worker or customer...",
+        "delete_confirm": "Remove this route assignment?",
+        "delete_fail": "Failed to delete assignment",
+        "create_fail": "Failed to create assignment"
     },
     "admin": {
         "dashboard_title": "Dashboard",
