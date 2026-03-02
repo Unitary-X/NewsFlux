@@ -142,7 +142,9 @@
         "revenue_kpi": "Revenue (14D)",
         "stock_summary": "Stock Summary",
         "revenue_trend": "Revenue Trend",
-        "daily_revenue": "Daily Revenue"
+        "daily_revenue": "Daily Revenue",
+        "monthly_revenue": "Monthly Revenue",
+        "total": "Total"
     },
     "worker": {
         "title": "Distributor PWA",

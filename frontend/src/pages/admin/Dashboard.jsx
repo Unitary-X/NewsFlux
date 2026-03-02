@@ -71,7 +71,8 @@ export default function AdminDashboard() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8">
-            <div>{t('admin.dashboard_title')}</h1>
+            <div>
+                <h1 className="text-3xl font-bold text-slate-800 tracking-tight">{t('admin.dashboard_title')}</h1>
                 <p className="text-slate-500 mt-1">{t('admin.dashboard_subtitle')}</p>
             </div>
 
@@ -81,8 +82,7 @@ export default function AdminDashboard() {
                 <KPICard title={t('admin.workers_kpi')} value={s.total_workers} icon={UserSquare2} color="indigo" />
                 <KPICard title={t('admin.customers_kpi')} value={s.total_customers} icon={Users} color="emerald" />
                 <KPICard title={t('admin.revenue_kpi')} value={`₹${s.today_revenue?.toLocaleString() || 0}`} icon={IndianRupee} color="amber" sub={`${t('stock.sold')}: ${s.today_sold || 0}`} />
-                <KPICard title={t('admin.revenue_kpi')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`Pending_sold || 0} copies`} />
-                <KPICard title="Monthly Revenue" value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`Pending bills: ${s.pending_invoices || 0}`} />
+                <KPICard title={t('admin.monthly_revenue')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`${t('billing.pending_amount')}: ${s.pending_invoices || 0}`} />
             </div>
 
             {/* Charts Row */}
@@ -161,7 +161,7 @@ export default function AdminDashboard() {
                                 </tr>
                             ))}
                             <tr className="bg-slate-50 font-bold">
-                                <td className="px-6 py-3 text-slate-800">{t('common.actions')}</td>
+                                <td className="px-6 py-3 text-slate-800">{t('admin.total')}</td>
                                 <td className="px-6 py-3"></td>
                                 <td className="px-6 py-3 text-right text-blue-600">{stockSummary.reduce((a, s) => a + s.taken, 0)}</td>
                                 <td className="px-6 py-3 text-right text-amber-600">{stockSummary.reduce((a, s) => a + s.returned, 0)}</td>

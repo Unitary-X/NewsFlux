@@ -142,7 +142,9 @@
         "revenue_kpi": "வருவாய் (14 நாட்கள்)",
         "stock_summary": "பங்கு சுருக்கம்",
         "revenue_trend": "வருவாய் போக்கு",
-        "daily_revenue": "தினசரி வருவாய்"
+        "daily_revenue": "தினசரி வருவாய்",
+        "monthly_revenue": "மாத வருவாய்",
+        "total": "மொத்தம்"
     },
     "worker": {
         "title": "விநியோகஸ்தர் PWA",
