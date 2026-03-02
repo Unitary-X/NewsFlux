@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import func, extract
 from typing import List, Optional
@@ -1025,3 +1025,258 @@ def database_backup_stats(db: Session = Depends(get_db)):
         total += count
 
     return {"total_rows": total, "tables": table_stats}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# DATABASE RESTORE (upload JSON backup)
+# ═══════════════════════════════════════════════════════════════════
+
+TABLE_MODEL_MAP = {
+    "agencies": Agency,
+    "users": User,
+    "newspapers": Newspaper,
+    "customers": Customer,
+    "customer_subscriptions": CustomerSubscription,
+    "daily_stock": DailyStock,
+    "worker_assignments": WorkerAssignment,
+    "invoices": Invoice,
+    "audit_logs": AuditLog,
+    "billing_plans": BillingPlan,
+    "agency_templates": AgencyTemplate,
+    "announcements": Announcement,
+    "platform_settings": PlatformSettings,
+}
+
+
+@router.post("/backup/db/upload", dependencies=[Depends(require_role(["super_admin"]))])
+async def upload_database_json(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload a newsflux_db_export_v1 JSON file and restore it into the database.
+    This performs an UPSERT — existing rows (by PK) are updated, new ones are inserted.
+    """
+    if not file.filename.endswith(".json"):
+        raise HTTPException(status_code=400, detail="Only .json backup files are accepted")
+
+    content = await file.read()
+    if len(content) > 100 * 1024 * 1024:  # 100 MB limit
+        raise HTTPException(status_code=400, detail="File too large (max 100 MB)")
+
+    try:
+        data = json.loads(content)
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=400, detail="Invalid JSON file")
+
+    if data.get("format") != "newsflux_db_export_v1":
+        raise HTTPException(status_code=400, detail="Unsupported backup format. Expected newsflux_db_export_v1")
+
+    tables_data = data.get("tables", {})
+    if not tables_data:
+        raise HTTPException(status_code=400, detail="No tables found in backup file")
+
+    summary = {}
+    # Process tables in dependency order (parents before children)
+    ordered_tables = [
+        "billing_plans", "platform_settings", "agencies", "users",
+        "newspapers", "customers", "customer_subscriptions",
+        "daily_stock", "worker_assignments", "invoices",
+        "audit_logs", "agency_templates", "announcements",
+    ]
+
+    try:
+        for table_name in ordered_tables:
+            if table_name not in tables_data:
+                continue
+            model = TABLE_MODEL_MAP.get(table_name)
+            if not model:
+                continue
+
+            rows = tables_data[table_name].get("rows", [])
+            inserted = 0
+            updated = 0
+
+            pk_cols = [col.name for col in model.__table__.primary_key.columns]
+
+            for row_data in rows:
+                # Convert string UUIDs back to UUID objects for UUID columns
+                for col in model.__table__.columns:
+                    if col.name in row_data and row_data[col.name] is not None:
+                        if str(col.type) in ("UUID", "Uuid"):
+                            try:
+                                row_data[col.name] = uuid_mod.UUID(row_data[col.name])
+                            except (ValueError, AttributeError):
+                                pass
+
+                # Check if row exists by PK
+                pk_filter = {pk: row_data.get(pk) for pk in pk_cols}
+                existing = db.query(model).filter_by(**pk_filter).first()
+
+                if existing:
+                    for key, val in row_data.items():
+                        if key not in pk_cols:
+                            setattr(existing, key, val)
+                    updated += 1
+                else:
+                    obj = model(**row_data)
+                    db.add(obj)
+                    inserted += 1
+
+            summary[table_name] = {"inserted": inserted, "updated": updated}
+
+        db.commit()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"Restore failed: {str(e)[:500]}")
+
+    total_inserted = sum(s["inserted"] for s in summary.values())
+    total_updated = sum(s["updated"] for s in summary.values())
+
+    return {
+        "status": "success",
+        "total_inserted": total_inserted,
+        "total_updated": total_updated,
+        "tables": summary,
+    }
+
+
+# ═══════════════════════════════════════════════════════════════════
+# SUPER ADMIN GOOGLE DRIVE BACKUP
+# ═══════════════════════════════════════════════════════════════════
+
+def _get_sa_gdrive_token(db: Session) -> str | None:
+    """Retrieve the super admin's encrypted GDrive refresh token from PlatformSettings."""
+    setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_refresh_token"
+    ).first()
+    return setting.setting_value if setting else None
+
+
+@router.get("/backup/gdrive/status", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_gdrive_status(db: Session = Depends(get_db)):
+    """Check if Google Drive is connected for super admin backups."""
+    token = _get_sa_gdrive_token(db)
+    connected_at_setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_connected_at"
+    ).first()
+    return {
+        "connected": token is not None,
+        "connected_at": connected_at_setting.setting_value if connected_at_setting else None,
+    }
+
+
+@router.get("/backup/gdrive/connect", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_gdrive_connect():
+    """Get Google OAuth URL for super admin Drive connection."""
+    if not settings.GOOGLE_CLIENT_ID:
+        raise HTTPException(status_code=400, detail="Google Drive integration not configured")
+    from app.services.gdrive_service import get_authorization_url
+    return {"url": get_authorization_url()}
+
+
+@router.get("/backup/gdrive/callback", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_gdrive_callback(code: str, db: Session = Depends(get_db)):
+    """OAuth callback — store super admin's Drive refresh token."""
+    from app.services.gdrive_service import exchange_code_for_tokens, encrypt_token
+    tokens = exchange_code_for_tokens(code)
+    if not tokens.get("refresh_token"):
+        raise HTTPException(status_code=400, detail="No refresh token received. Try disconnecting and reconnecting.")
+
+    encrypted = encrypt_token(tokens["refresh_token"])
+
+    # Upsert token
+    for key, val in [("sa_gdrive_refresh_token", encrypted), ("sa_gdrive_connected_at", datetime.utcnow().isoformat())]:
+        setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == key).first()
+        if setting:
+            setting.setting_value = val
+        else:
+            db.add(PlatformSettings(setting_key=key, setting_value=val))
+
+    db.commit()
+    return {"status": "connected"}
+
+
+@router.post("/backup/gdrive/disconnect", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_gdrive_disconnect(db: Session = Depends(get_db)):
+    """Remove super admin's Drive credentials."""
+    for key in ["sa_gdrive_refresh_token", "sa_gdrive_connected_at"]:
+        setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == key).first()
+        if setting:
+            db.delete(setting)
+    db.commit()
+    return {"status": "disconnected"}
+
+
+@router.post("/backup/gdrive/upload-db", dependencies=[Depends(require_role(["super_admin"]))])
+def sa_gdrive_upload_db(db: Session = Depends(get_db)):
+    """Export full database as JSON and upload to super admin's Google Drive."""
+    token = _get_sa_gdrive_token(db)
+    if not token:
+        raise HTTPException(status_code=400, detail="Google Drive not connected for super admin")
+
+    from app.services.gdrive_service import upload_file
+
+    # Generate the JSON export
+    tables = dict(TABLE_MODEL_MAP)
+    export = {
+        "exported_at": datetime.utcnow().isoformat(),
+        "format": "newsflux_db_export_v1",
+        "tables": {},
+    }
+    for table_name, model in tables.items():
+        rows = db.query(model).all()
+        export["tables"][table_name] = {
+            "count": len(rows),
+            "rows": [_serialize_row(r) for r in rows],
+        }
+
+    json_bytes = json.dumps(export, indent=2, ensure_ascii=False).encode("utf-8")
+    timestamp = datetime.utcnow().strftime("%Y%m%d_%H%M%S")
+    filename = f"newsflux_full_backup_{timestamp}.json"
+
+    result = upload_file(
+        token, "SuperAdmin", "Database Backups", filename, json_bytes,
+        mime_type="application/json",
+    )
+    return {"status": "uploaded", "filename": filename, **result}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# BACKUP ALL AGENCIES (trigger daily backup for all connected)
+# ═══════════════════════════════════════════════════════════════════
+
+@router.post("/backup/trigger-all", dependencies=[Depends(require_role(["super_admin"]))])
+def trigger_all_agency_backups(db: Session = Depends(get_db)):
+    """Trigger daily backup for all agencies that have Google Drive connected."""
+    from app.services.excel_export import generate_daily_stock_excel, generate_daily_deliveries_excel
+    from app.services.gdrive_service import upload_file
+
+    agencies = db.query(Agency).filter(Agency.gdrive_refresh_token.isnot(None)).all()
+    if not agencies:
+        raise HTTPException(status_code=400, detail="No agencies have Google Drive connected")
+
+    target_date = date.today()
+    date_str = target_date.isoformat()
+    agency_results = []
+
+    for agency in agencies:
+        a_result = {"agency_id": str(agency.id), "agency_name": agency.name, "files": []}
+        for gen_fn, fname in [
+            (generate_daily_stock_excel, f"{date_str}_daily_stock.xlsx"),
+            (generate_daily_deliveries_excel, f"{date_str}_deliveries.xlsx"),
+        ]:
+            try:
+                file_bytes = gen_fn(db, agency.id, target_date)
+                r = upload_file(agency.gdrive_refresh_token, agency.name, "Daily Updates", fname, file_bytes)
+                a_result["files"].append({"file": fname, "status": "uploaded", **r})
+            except Exception as e:
+                a_result["files"].append({"file": fname, "status": "failed", "error": str(e)[:200]})
+        agency_results.append(a_result)
+
+    total_ok = sum(1 for a in agency_results for f in a["files"] if f["status"] == "uploaded")
+    total_fail = sum(1 for a in agency_results for f in a["files"] if f["status"] == "failed")
+
+    return {
+        "date": date_str,
+        "agencies_processed": len(agency_results),
+        "total_uploaded": total_ok,
+        "total_failed": total_fail,
+        "results": agency_results,
+    }
