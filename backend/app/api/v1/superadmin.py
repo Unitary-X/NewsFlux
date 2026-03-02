@@ -11,10 +11,12 @@ from app.api.dependencies import get_db, require_role
 from app.models.models import (
     Agency, User, Newspaper, Customer, CustomerSubscription,
     DailyStock, WorkerAssignment, Invoice, AuditLog,
-    BillingPlan, AgencyTemplate, Announcement
+    BillingPlan, AgencyTemplate, Announcement, PlatformSettings
 )
 from app.core.security import get_password_hash, create_access_token
 from app.core.metrics import collector
+from app.core.celery_app import celery_app
+from app.core.config import settings
 
 router = APIRouter()
 
@@ -164,9 +166,31 @@ def update_agency_status(request: Request, agency_id: str, payload: AgencyStatus
     agency = db.query(Agency).filter(Agency.id == uid).first()
     if not agency:
         raise HTTPException(status_code=404, detail="Agency not found")
+    
+    old_status = agency.status
     agency.status = payload.status
     db.commit()
     db.refresh(agency)
+    
+    # Send suspension email if status changed to suspended
+    if old_status == "active" and payload.status == "suspended" and settings.EMAILS_ENABLED:
+        # Get admin email
+        admin = db.query(User).filter(
+            User.tenant_id == uid,
+            User.role == "admin"
+        ).first()
+        
+        if admin and admin.username:  # Use username as email for now
+            celery_app.send_task(
+                'email.send_agency_suspended',
+                args=[
+                    agency.name,
+                    f"{admin.username}@newsflux.app",
+                    "Account policy violation or non-payment",
+                    settings.SUPPORT_EMAIL or "support@newsflux.app"
+                ]
+            )
+    
     return agency
 
 @router.put("/agencies/{agency_id}/plan", dependencies=[Depends(require_role(["super_admin"]))])
@@ -643,3 +667,64 @@ def delete_billing_plan(request: Request, plan_id: str, db: Session = Depends(ge
     db.delete(plan)
     db.commit()
     return {"detail": "Billing plan deleted"}
+
+
+# ═══════════════════════════════════════════════════════════════════
+# PLATFORM SETTINGS
+# ═══════════════════════════════════════════════════════════════════
+
+@router.get("/settings", dependencies=[Depends(require_role(["super_admin"]))])
+def get_all_settings(request: Request, db: Session = Depends(get_db)):
+    """ Get all platform settings. """
+    settings = db.query(PlatformSettings).all()
+    return [{
+        "id": str(s.id), "setting_key": s.setting_key, "setting_value": s.setting_value,
+        "created_at": s.created_at.isoformat() if s.created_at else None,
+        "updated_at": s.updated_at.isoformat() if s.updated_at else None,
+    } for s in settings]
+
+@router.get("/settings/{setting_key}", dependencies=[Depends(require_role(["super_admin"]))])
+def get_setting(request: Request, setting_key: str, db: Session = Depends(get_db)):
+    """ Get a specific platform setting by key. """
+    setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == setting_key).first()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    return {
+        "id": str(setting.id), "setting_key": setting.setting_key, "setting_value": setting.setting_value,
+        "created_at": setting.created_at.isoformat() if setting.created_at else None,
+        "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
+    }
+
+@router.put("/settings/{setting_key}", dependencies=[Depends(require_role(["super_admin"]))])
+def update_setting(request: Request, setting_key: str, payload: dict, db: Session = Depends(get_db)):
+    """ Update or create a platform setting. """
+    setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == setting_key).first()
+    
+    if not setting:
+        # Create new setting
+        setting = PlatformSettings(
+            setting_key=setting_key,
+            setting_value=payload.get("setting_value")
+        )
+        db.add(setting)
+    else:
+        # Update existing setting
+        setting.setting_value = payload.get("setting_value")
+    
+    db.commit()
+    db.refresh(setting)
+    return {
+        "id": str(setting.id), "setting_key": setting.setting_key, "setting_value": setting.setting_value,
+        "created_at": setting.created_at.isoformat() if setting.created_at else None,
+        "updated_at": setting.updated_at.isoformat() if setting.updated_at else None,
+    }
+
+@router.delete("/settings/{setting_key}", dependencies=[Depends(require_role(["super_admin"]))])
+def delete_setting(request: Request, setting_key: str, db: Session = Depends(get_db)):
+    """ Delete a platform setting. """
+    setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == setting_key).first()
+    if not setting:
+        raise HTTPException(status_code=404, detail="Setting not found")
+    db.delete(setting)
+    db.commit()
+    return {"detail": "Setting deleted"}

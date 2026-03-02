@@ -8,6 +8,7 @@ from app.models.models import User, Agency, Newspaper, AgencyTemplate
 from app.schemas.auth import LoginRequest, AgencyRegisterRequest, Token
 from app.core.security import verify_password, get_password_hash, create_access_token
 from app.core.config import settings
+from app.core.celery_app import celery_app
 from pydantic import BaseModel
 
 router = APIRouter()
@@ -59,7 +60,20 @@ def register_agency(request: RegisterWithTemplate, db: Session = Depends(get_db)
 
     db.commit()
 
-    # 4. Log them in automatically
+    # 4. Send welcome email (asynchronously)
+    if settings.EMAILS_ENABLED:
+        dashboard_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/admin/dashboard"
+        celery_app.send_task(
+            'email.send_agency_created',
+            args=[
+                request.agency_name,
+                request.admin_username,
+                settings.SMTP_FROM_EMAIL,  # Using default for now, could be extracted from request
+                dashboard_url
+            ]
+        )
+    
+    # 5. Log them in automatically
     access_token = create_access_token(
         subject=new_admin.id,
         role=new_admin.role,

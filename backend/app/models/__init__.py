@@ -7,5 +7,10 @@ from .models import (
     DailyStock,
     WorkerAssignment,
     Invoice,
-    AuditLog
+    AuditLog,
+    BillingPlan,
+    AgencyTemplate,
+    Announcement,
+    PlatformSettings
 )
+

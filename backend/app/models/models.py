@@ -115,3 +115,11 @@ class Announcement(Base):
     is_active = Column(Boolean, default=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     expires_at = Column(DateTime, nullable=True)
+
+class PlatformSettings(Base):
+    __tablename__ = "platform_settings"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    setting_key = Column(String(100), nullable=False, unique=True)  # e.g., "app_name", "smtp_enabled"
+    setting_value = Column(Text, nullable=True)  # JSON-serialized value
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

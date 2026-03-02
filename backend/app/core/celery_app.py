@@ -10,7 +10,7 @@ celery_app = Celery(
     "newsflux_worker",
     broker=redis_url,
     backend=redis_url,
-    include=['app.services.billing_job', 'app.services.backup_scheduler']
+    include=['app.services.billing_job', 'app.services.backup_scheduler', 'app.services.email_tasks']
 )
 
 celery_app.conf.update(

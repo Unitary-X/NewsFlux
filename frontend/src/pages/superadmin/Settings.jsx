@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
-import { Settings as SettingsIcon, Shield, Plus, Trash2, Loader2, FileText, CreditCard, Layout, Bell, Save, DollarSign, Newspaper } from 'lucide-react';
+import { Settings as SettingsIcon, Shield, Plus, Trash2, Loader2, FileText, CreditCard, Layout, Bell, Save, DollarSign, Newspaper, Mail } from 'lucide-react';
 
 export default function Settings() {
     const [activeTab, setActiveTab] = useState('general');
     const tabs = [
         { id: 'general', label: 'General', icon: SettingsIcon },
+        { id: 'email', label: 'Email', icon: Mail },
         { id: 'templates', label: 'Agency Templates', icon: Layout },
         { id: 'billing', label: 'Billing Plans', icon: CreditCard },
         { id: 'admins', label: 'Super Admins', icon: Shield },
@@ -22,10 +23,10 @@ export default function Settings() {
             </div>
 
             {/* Tab Navigation */}
-            <div className="flex gap-1 bg-slate-900/60 border border-slate-700/40 rounded-xl p-1">
+            <div className="flex gap-1 bg-slate-900/60 border border-slate-700/40 rounded-xl p-1 overflow-x-auto">
                 {tabs.map(tab => (
                     <button key={tab.id} onClick={() => setActiveTab(tab.id)}
-                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors ${activeTab === tab.id
+                        className={`flex items-center gap-2 px-4 py-2 rounded-lg text-xs font-bold transition-colors whitespace-nowrap ${activeTab === tab.id
                                 ? 'bg-indigo-500/20 text-indigo-400'
                                 : 'text-slate-500 hover:text-slate-300 hover:bg-slate-800/50'
                             }`}>
@@ -36,6 +37,7 @@ export default function Settings() {
             </div>
 
             {activeTab === 'general' && <GeneralSettings />}
+            {activeTab === 'email' && <EmailSettings />}
             {activeTab === 'templates' && <TemplateSettings />}
             {activeTab === 'billing' && <BillingPlansSettings />}
             {activeTab === 'admins' && <AdminManagement />}
@@ -46,36 +48,308 @@ export default function Settings() {
 // ─── General Settings ──────────────────
 function GeneralSettings() {
     const [settings, setSettings] = useState({
-        platform_name: 'NewsFlux', support_email: 'support@newsflux.app',
-        max_agencies: 500, trial_days: 14, maintenance_mode: false,
-        enable_notifications: true, audit_log_retention: 90,
+        app_name: 'NewsFlux',
+        contact_email: 'contact@newsflux.app',
+        support_email: 'support@newsflux.app',
+        currency: 'USD',
+        default_delivery_fee: '0',
     });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        loadSettings();
+    }, []);
+
+    const loadSettings = async () => {
+        try {
+            const res = await api.get('/superadmin/settings');
+            const settingsMap = {};
+            res.data.forEach(s => {
+                settingsMap[s.setting_key] = s.setting_value;
+            });
+            setSettings(prev => ({
+                ...prev,
+                app_name: settingsMap['app_name'] || prev.app_name,
+                contact_email: settingsMap['contact_email'] || prev.contact_email,
+                support_email: settingsMap['support_email'] || prev.support_email,
+                currency: settingsMap['currency'] || prev.currency,
+                default_delivery_fee: settingsMap['default_delivery_fee'] || prev.default_delivery_fee,
+            }));
+        } catch (err) {
+            console.error('Failed to load settings:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            const updates = [
+                { key: 'app_name', value: settings.app_name },
+                { key: 'contact_email', value: settings.contact_email },
+                { key: 'support_email', value: settings.support_email },
+                { key: 'currency', value: settings.currency },
+                { key: 'default_delivery_fee', value: settings.default_delivery_fee },
+            ];
+
+            for (const upd of updates) {
+                await api.put(`/superadmin/settings/${upd.key}`, { setting_value: upd.value });
+            }
+
+            setMessage('Settings saved successfully!');
+            setTimeout(() => setMessage(''), 3000);
+        } catch (err) {
+            setMessage(err.response?.data?.detail || 'Failed to save settings');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 text-center text-slate-500 animate-pulse">
+                Loading settings...
+            </div>
+        );
+    }
 
     return (
         <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 space-y-6">
-            <h3 className="text-white font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4 text-indigo-400" /> General</h3>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <Field label="Platform Name" value={settings.platform_name} onChange={v => setSettings({ ...settings, platform_name: v })} />
-                <Field label="Support Email" value={settings.support_email} onChange={v => setSettings({ ...settings, support_email: v })} />
-                <Field label="Max Agencies" type="number" value={settings.max_agencies} onChange={v => setSettings({ ...settings, max_agencies: parseInt(v) })} />
-                <Field label="Trial Days" type="number" value={settings.trial_days} onChange={v => setSettings({ ...settings, trial_days: parseInt(v) })} />
-                <Field label="Audit Log Retention (days)" type="number" value={settings.audit_log_retention} onChange={v => setSettings({ ...settings, audit_log_retention: parseInt(v) })} />
+            <h3 className="text-white font-bold flex items-center gap-2"><SettingsIcon className="w-4 h-4 text-indigo-400" /> General Platform Settings</h3>
+            
+            <form onSubmit={handleSave} className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2">Platform Name</label>
+                        <input
+                            value={settings.app_name}
+                            onChange={e => setSettings({ ...settings, app_name: e.target.value })}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="NewsFlux"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2">Currency</label>
+                        <select
+                            value={settings.currency}
+                            onChange={e => setSettings({ ...settings, currency: e.target.value })}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                        >
+                            <option value="USD">USD ($)</option>
+                            <option value="INR">INR (₹)</option>
+                            <option value="EUR">EUR (€)</option>
+                            <option value="GBP">GBP (£)</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2">Contact Email</label>
+                        <input
+                            type="email"
+                            value={settings.contact_email}
+                            onChange={e => setSettings({ ...settings, contact_email: e.target.value })}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="contact@newsflux.app"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2">Support Email</label>
+                        <input
+                            type="email"
+                            value={settings.support_email}
+                            onChange={e => setSettings({ ...settings, support_email: e.target.value })}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="support@newsflux.app"
+                        />
+                    </div>
+                    <div>
+                        <label className="block text-xs font-semibold text-slate-400 mb-2">Default Delivery Fee</label>
+                        <input
+                            type="number"
+                            step="0.01"
+                            value={settings.default_delivery_fee}
+                            onChange={e => setSettings({ ...settings, default_delivery_fee: e.target.value })}
+                            className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-indigo-500"
+                            placeholder="0.00"
+                        />
+                    </div>
+                </div>
+
+                {message && (
+                    <div className={`p-3 rounded-lg text-sm ${message.includes('success') ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                        {message}
+                    </div>
+                )}
+
+                <div className="flex gap-2 pt-4">
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 disabled:opacity-50 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors text-xs font-bold"
+                    >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {saving ? 'Saving...' : 'Save Settings'}
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+}
+
+// ─── Email Settings ──────────────────
+function EmailSettings() {
+    const [settings, setSettings] = useState({
+        smtp_enabled: 'false',
+        smtp_server: '',
+        smtp_port: '587',
+        smtp_from_email: 'noreply@newsflux.app',
+    });
+    const [loading, setLoading] = useState(true);
+    const [saving, setSaving] = useState(false);
+    const [message, setMessage] = useState('');
+
+    useEffect(() => {
+        loadSettings();
+    }, []);
+
+    const loadSettings = async () => {
+        try {
+            const res = await api.get('/superadmin/settings');
+            const settingsMap = {};
+            res.data.forEach(s => {
+                settingsMap[s.setting_key] = s.setting_value;
+            });
+            setSettings(prev => ({
+                ...prev,
+                smtp_enabled: settingsMap['smtp_enabled'] || prev.smtp_enabled,
+                smtp_server: settingsMap['smtp_server'] || prev.smtp_server,
+                smtp_port: settingsMap['smtp_port'] || prev.smtp_port,
+                smtp_from_email: settingsMap['smtp_from_email'] || prev.smtp_from_email,
+            }));
+        } catch (err) {
+            console.error('Failed to load email settings:', err);
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setSaving(true);
+        setMessage('');
+        try {
+            const updates = [
+                { key: 'smtp_enabled', value: settings.smtp_enabled },
+                { key: 'smtp_server', value: settings.smtp_server },
+                { key: 'smtp_port', value: settings.smtp_port },
+                { key: 'smtp_from_email', value: settings.smtp_from_email },
+            ];
+
+            for (const upd of updates) {
+                await api.put(`/superadmin/settings/${upd.key}`, { setting_value: upd.value });
+            }
+
+            setMessage('Email settings saved! Restart the server for changes to take effect.');
+            setTimeout(() => setMessage(''), 5000);
+        } catch (err) {
+            setMessage(err.response?.data?.detail || 'Failed to save settings');
+        } finally {
+            setSaving(false);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 text-center text-slate-500 animate-pulse">
+                Loading email settings...
             </div>
-            <div className="flex gap-6">
-                <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={settings.maintenance_mode} onChange={e => setSettings({ ...settings, maintenance_mode: e.target.checked })}
-                        className="w-4 h-4 rounded border-slate-600 accent-indigo-500" />
-                    <span className="text-slate-400">Maintenance Mode</span>
-                </label>
-                <label className="flex items-center gap-2 text-sm">
-                    <input type="checkbox" checked={settings.enable_notifications} onChange={e => setSettings({ ...settings, enable_notifications: e.target.checked })}
-                        className="w-4 h-4 rounded border-slate-600 accent-indigo-500" />
-                    <span className="text-slate-400">Enable Notifications</span>
-                </label>
+        );
+    }
+
+    return (
+        <div className="backdrop-blur-xl bg-slate-900/60 border border-slate-700/40 rounded-2xl p-6 space-y-6">
+            <h3 className="text-white font-bold flex items-center gap-2"><Mail className="w-4 h-4 text-purple-400" /> Email Configuration</h3>
+            
+            <div className="bg-slate-800/30 border border-slate-700/40 rounded-lg p-4 text-sm text-slate-400">
+                <p className="mb-2"><strong>Note:</strong> SMTP configuration allows NewsFlux to send transactional emails for:</p>
+                <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>Welcome emails when agencies register</li>
+                    <li>Suspension notifications</li>
+                    <li>Billing reminders</li>
+                    <li>Platform announcements</li>
+                </ul>
             </div>
-            <button className="flex items-center gap-2 px-4 py-2 bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-400 border border-indigo-500/20 rounded-lg transition-colors text-xs font-bold">
-                <Save className="w-3.5 h-3.5" /> Save Settings
-            </button>
+
+            <form onSubmit={handleSave} className="space-y-4">
+                <div className="flex items-center gap-3">
+                    <input
+                        type="checkbox"
+                        id="smtp-enabled"
+                        checked={settings.smtp_enabled === 'true'}
+                        onChange={e => setSettings({ ...settings, smtp_enabled: e.target.checked ? 'true' : 'false' })}
+                        className="w-4 h-4 rounded border-slate-600 accent-purple-500 cursor-pointer"
+                    />
+                    <label htmlFor="smtp-enabled" className="text-white font-semibold cursor-pointer">Enable Email Notifications</label>
+                </div>
+
+                {settings.smtp_enabled === 'true' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 bg-slate-800/20 rounded-lg border border-slate-700/30">
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-2">SMTP Server</label>
+                            <input
+                                type="text"
+                                value={settings.smtp_server}
+                                onChange={e => setSettings({ ...settings, smtp_server: e.target.value })}
+                                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                                placeholder="smtp.gmail.com"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">e.g., smtp.gmail.com, smtp.sendgrid.net</p>
+                        </div>
+                        <div>
+                            <label className="block text-xs font-semibold text-slate-400 mb-2">SMTP Port</label>
+                            <input
+                                type="number"
+                                value={settings.smtp_port}
+                                onChange={e => setSettings({ ...settings, smtp_port: e.target.value })}
+                                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                                placeholder="587"
+                            />
+                            <p className="text-xs text-slate-500 mt-1">Typically 587 (TLS) or 465 (SSL)</p>
+                        </div>
+                        <div className="md:col-span-2">
+                            <label className="block text-xs font-semibold text-slate-400 mb-2">From Email Address</label>
+                            <input
+                                type="email"
+                                value={settings.smtp_from_email}
+                                onChange={e => setSettings({ ...settings, smtp_from_email: e.target.value })}
+                                className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-purple-500"
+                                placeholder="noreply@newsflux.app"
+                            />
+                        </div>
+                    </div>
+                )}
+
+                {message && (
+                    <div className={`p-3 rounded-lg text-sm ${message.includes('saved') ? 'bg-green-500/10 border border-green-500/20 text-green-400' : 'bg-red-500/10 border border-red-500/20 text-red-400'}`}>
+                        {message}
+                    </div>
+                )}
+
+                <div className="flex gap-2 pt-4">
+                    <button
+                        type="submit"
+                        disabled={saving}
+                        className="flex items-center gap-2 px-4 py-2 bg-purple-500/20 hover:bg-purple-500/30 disabled:opacity-50 text-purple-400 border border-purple-500/20 rounded-lg transition-colors text-xs font-bold"
+                    >
+                        {saving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                        {saving ? 'Saving...' : 'Save Email Settings'}
+                    </button>
+                </div>
+            </form>
         </div>
     );
 }

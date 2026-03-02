@@ -13,6 +13,18 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = os.getenv("GOOGLE_REDIRECT_URI", "http://localhost:8000/api/v1/admin/backup/google/callback")
     GDRIVE_ENABLED: bool = os.getenv("GDRIVE_ENABLED", "false").lower() == "true"
 
+    # Email Configuration
+    SMTP_SERVER: str = os.getenv("SMTP_SERVER", "localhost")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")
+    SMTP_FROM_EMAIL: str = os.getenv("SMTP_FROM_EMAIL", "noreply@newsflux.app")
+    EMAILS_ENABLED: bool = os.getenv("EMAILS_ENABLED", "false").lower() == "true"
+
+    # Frontend Configuration
+    FRONTEND_URL: str = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    SUPPORT_EMAIL: str = os.getenv("SUPPORT_EMAIL", "support@newsflux.app")
+
     class Config:
         env_file = ".env"
 
