@@ -5,10 +5,12 @@ import api from '../../utils/api';
 import { db } from '../../utils/db';
 import StepperInput from '../../components/worker/StepperInput';
 import { Wifi, WifiOff, RefreshCw, LogOut, CheckCircle } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 
 export default function WorkerDashboard() {
     const { user, logout } = useAuth();
     const { isOnline, isSyncing, queueAction } = useSyncQueue();
+    const { t } = useTranslation();
     const [newspapers, setNewspapers] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [activeTab, setActiveTab] = useState('stock'); // 'stock' | 'deliveries'
@@ -92,8 +94,8 @@ export default function WorkerDashboard() {
             {/* Header */}
             <header className="px-4 py-4 bg-white border-b border-slate-200 shadow-sm flex justify-between items-center sticky top-0 z-10 shrink-0">
                 <div>
-                    <h1 className="text-xl font-black tracking-tight text-slate-900">Distributor PWA</h1>
-                    <p className="text-xs font-semibold text-slate-400 mt-0.5 capitalize">{user?.role} Portal</p>
+                    <h1 className="text-xl font-black tracking-tight text-slate-900">{t('worker.title')}</h1>
+                    <p className="text-xs font-semibold text-slate-400 mt-0.5 capitalize">{user?.role} {t('worker.portal')}</p>
                 </div>
 
                 <div className="flex items-center gap-3">
@@ -101,12 +103,12 @@ export default function WorkerDashboard() {
                     <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-bold transition-colors ${isOnline ? 'bg-emerald-100 text-emerald-700 ring-1 ring-emerald-500/20' : 'bg-red-100 text-red-700 ring-1 ring-red-500/20'
                         }`}>
                         {isOnline ? <Wifi className="w-3.5 h-3.5" /> : <WifiOff className="w-3.5 h-3.5" />}
-                        {isOnline ? 'Online' : 'Offline'}
+                        {isOnline ? t('worker.online') : t('worker.offline')}
                     </div>
 
                     {/* Sync Indicator */}
                     {isSyncing && (
-                        <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" />
+                        <RefreshCw className="w-5 h-5 text-blue-500 animate-spin" title={t('worker.syncing')} />
                     )}
 
                     <button onClick={logout} className="p-2 text-slate-400 hover:text-red-500 bg-slate-100 rounded-full transition-colors">
@@ -122,14 +124,14 @@ export default function WorkerDashboard() {
                     className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all shadow-sm ${activeTab === 'stock' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200'
                         }`}
                 >
-                    1. Daily Stock
+                    1. {t('worker.stock_entry')}
                 </button>
                 <button
                     onClick={() => setActiveTab('deliveries')}
                     className={`flex-1 py-3 font-bold text-sm rounded-xl transition-all shadow-sm ${activeTab === 'deliveries' ? 'bg-slate-800 text-white' : 'bg-white text-slate-500 border border-slate-200'
                         }`}
                 >
-                    2. Deliveries
+                    2. {t('worker.deliveries')}
                 </button>
             </div>
 
@@ -141,7 +143,7 @@ export default function WorkerDashboard() {
                     <div className="space-y-6 isolate">
                         {newspapers.length === 0 ? (
                             <div className="text-center py-12 text-slate-400">
-                                <p>No newspapers assigned to this agency.</p>
+                                <p>{t('worker.no_newspapers')}</p>
                             </div>
                         ) : (
                             newspapers.map(paper => (
@@ -150,12 +152,12 @@ export default function WorkerDashboard() {
 
                                     <div className="space-y-5">
                                         <StepperInput
-                                            label="Quantity Taken (from Agent)"
+                                            label={`${t('stock.taken')} (${t('worker.from')})`}
                                             value={paper.taken || 0}
                                             onChange={(val) => handleStockChange(paper.newspaper_id, 'taken', val)}
                                         />
                                         <StepperInput
-                                            label="Quantity Returned (to Agent)"
+                                            label={`${t('stock.returned')} (${t('worker.to')})`}
                                             value={paper.returned || 0}
                                             onChange={(val) => handleStockChange(paper.newspaper_id, 'returned', val)}
                                         />
@@ -171,7 +173,7 @@ export default function WorkerDashboard() {
                     <div className="space-y-4 isolate">
                         {customers.length === 0 ? (
                             <div className="text-center py-12 text-slate-400">
-                                <p>No customers assigned.</p>
+                                <p>{t('worker.no_customers')}</p>
                             </div>
                         ) : (
                             customers.map(cust => (
@@ -185,6 +187,7 @@ export default function WorkerDashboard() {
                                         onClick={() => handleDeliveryToggle(cust.id, cust.status)}
                                         className={`shrink-0 w-12 h-12 rounded-full flex justify-center items-center shadow-md transition-all active:scale-95 ${cust.status === 1 ? 'bg-emerald-500 text-white shadow-emerald-500/30' : 'bg-slate-100 text-slate-300 border border-slate-200 shadow-none'
                                             }`}
+                                        title={cust.status === 1 ? t('worker.delivered') : t('worker.pending')}
                                     >
                                         <CheckCircle className="w-6 h-6" />
                                     </button>
@@ -197,7 +200,7 @@ export default function WorkerDashboard() {
 
             {/* Notification Toast if Offline Actions are Queued */}
             {!isOnline && (
-                <div className="absolute bottom-6 left-4 right-4 bg-slate-800/90 backdrop-blur tracking-tight text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-50">
+                <div className="absolute bottom-6 left-4 r{t('worker.action_complete')}-blur tracking-tight text-white px-4 py-3 rounded-2xl shadow-xl flex items-center justify-between z-50">
                     <span className="text-sm font-medium">Changes saved securely offline.</span>
                     <WifiOff className="w-4 h-4 text-slate-400" />
                 </div>

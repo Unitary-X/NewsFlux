@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
 import { Newspaper, Users, UserSquare2, IndianRupee, TrendingUp, Package, FileText, Loader2 } from 'lucide-react';
 
@@ -29,6 +30,7 @@ function KPICard({ title, value, icon: Icon, color, sub }) {
 
 export default function AdminDashboard() {
     const { user } = useAuth();
+    const { t } = useTranslation();
     const [stats, setStats] = useState(null);
     const [revenueData, setRevenueData] = useState([]);
     const [stockSummary, setStockSummary] = useState([]);
@@ -69,17 +71,17 @@ export default function AdminDashboard() {
 
     return (
         <div className="max-w-7xl mx-auto space-y-8">
-            <div>
-                <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Dashboard</h1>
-                <p className="text-slate-500 mt-1">Overview of your agency's operations</p>
+            <div>{t('admin.dashboard_title')}</h1>
+                <p className="text-slate-500 mt-1">{t('admin.dashboard_subtitle')}</p>
             </div>
 
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-                <KPICard title="Newspapers" value={s.total_newspapers} icon={Newspaper} color="blue" />
-                <KPICard title="Workers" value={s.total_workers} icon={UserSquare2} color="indigo" />
-                <KPICard title="Customers" value={s.total_customers} icon={Users} color="emerald" />
-                <KPICard title="Today's Revenue" value={`₹${s.today_revenue?.toLocaleString() || 0}`} icon={IndianRupee} color="amber" sub={`Sold: ${s.today_sold || 0} copies`} />
+                <KPICard title={t('admin.newspapers_kpi')} value={s.total_newspapers} icon={Newspaper} color="blue" />
+                <KPICard title={t('admin.workers_kpi')} value={s.total_workers} icon={UserSquare2} color="indigo" />
+                <KPICard title={t('admin.customers_kpi')} value={s.total_customers} icon={Users} color="emerald" />
+                <KPICard title={t('admin.revenue_kpi')} value={`₹${s.today_revenue?.toLocaleString() || 0}`} icon={IndianRupee} color="amber" sub={`${t('stock.sold')}: ${s.today_sold || 0}`} />
+                <KPICard title={t('admin.revenue_kpi')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`Pending_sold || 0} copies`} />
                 <KPICard title="Monthly Revenue" value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`Pending bills: ${s.pending_invoices || 0}`} />
             </div>
 
@@ -87,7 +89,7 @@ export default function AdminDashboard() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 {/* Revenue Chart */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="text-lg font-bold text-slate-800 mb-4">Revenue Trend (14 Days)</h2>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4">{t('admin.revenue_trend')}</h2>
                     {revenueData.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
                             <AreaChart data={revenueData}>
@@ -100,18 +102,18 @@ export default function AdminDashboard() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                                 <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#94a3b8" />
                                 <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                                <Tooltip formatter={(v) => [`₹${v}`, 'Revenue']} />
+                                <Tooltip formatter={(v) => [`₹${v}`, t('admin.daily_revenue')]} />
                                 <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revGrad)" strokeWidth={2} />
                             </AreaChart>
                         </ResponsiveContainer>
                     ) : (
-                        <div className="h-64 flex items-center justify-center text-slate-400">No revenue data yet</div>
+                        <div className="h-64 flex items-center justify-center text-slate-400">{t('common.no_data')}</div>
                     )}
                 </div>
 
                 {/* Today's Stock Summary */}
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
-                    <h2 className="text-lg font-bold text-slate-800 mb-4">Today's Stock Summary</h2>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4">{t('admin.stock_summary')}</h2>
                     {stockSummary.length > 0 ? (
                         <ResponsiveContainer width="100%" height={280}>
                             <BarChart data={stockSummary}>
@@ -119,13 +121,13 @@ export default function AdminDashboard() {
                                 <XAxis dataKey="newspaper_name" tick={{ fontSize: 11 }} stroke="#94a3b8" />
                                 <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
                                 <Tooltip />
-                                <Bar dataKey="taken" fill="#3b82f6" name="Taken" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="returned" fill="#f59e0b" name="Returned" radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="sold" fill="#10b981" name="Sold" radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="taken" fill="#3b82f6" name={t('stock.taken')} radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="returned" fill="#f59e0b" name={t('stock.returned')} radius={[4, 4, 0, 0]} />
+                                <Bar dataKey="sold" fill="#10b981" name={t('stock.sold')} radius={[4, 4, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     ) : (
-                        <div className="h-64 flex items-center justify-center text-slate-400">No stock entries for today</div>
+                        <div className="h-64 flex items-center justify-center text-slate-400">{t('stock.no_data')}</div>
                     )}
                 </div>
             </div>
@@ -134,17 +136,17 @@ export default function AdminDashboard() {
             {stockSummary.length > 0 && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden">
                     <div className="px-6 py-4 border-b border-slate-200">
-                        <h2 className="text-lg font-bold text-slate-800">Today's Revenue Breakdown</h2>
+                        <h2 className="text-lg font-bold text-slate-800">{t('admin.daily_revenue')}</h2>
                     </div>
                     <table className="w-full text-left">
                         <thead>
                             <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
-                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">Price</th>
-                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">Taken</th>
-                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">Returned</th>
-                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">Sold</th>
-                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">Revenue</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600">{t('newspapers.title')}</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('newspapers.base_price')}</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('stock.taken')}</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('stock.returned')}</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('stock.sold')}</th>
+                                <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('admin.revenue_kpi')}</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-slate-100">
@@ -159,7 +161,7 @@ export default function AdminDashboard() {
                                 </tr>
                             ))}
                             <tr className="bg-slate-50 font-bold">
-                                <td className="px-6 py-3 text-slate-800">Total</td>
+                                <td className="px-6 py-3 text-slate-800">{t('common.actions')}</td>
                                 <td className="px-6 py-3"></td>
                                 <td className="px-6 py-3 text-right text-blue-600">{stockSummary.reduce((a, s) => a + s.taken, 0)}</td>
                                 <td className="px-6 py-3 text-right text-amber-600">{stockSummary.reduce((a, s) => a + s.returned, 0)}</td>

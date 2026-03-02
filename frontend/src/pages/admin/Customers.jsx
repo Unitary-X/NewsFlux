@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 import { Users, UserPlus, Loader2, MapPin, Phone, Pencil, Trash2, X, Search } from 'lucide-react';
 
 export default function Customers() {
+    const { t } = useTranslation();
     const [customers, setCustomers] = useState([]);
     const [filtered, setFiltered] = useState([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -60,12 +62,12 @@ export default function Customers() {
     };
 
     const deleteCustomer = async (id, name) => {
-        if (!confirm(`Delete "${name}"? Their subscriptions, assignments, and invoices will also be removed.`)) return;
+        if (!confirm(t('customers.delete_confirm', { name }))) return;
         try {
             await api.delete(`/admin/customers/${id}`);
             fetchCustomers();
         } catch (err) {
-            alert('Failed to delete customer');
+            alert(t('customers.delete_fail'));
         }
     };
 
@@ -73,8 +75,8 @@ export default function Customers() {
         <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-end mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Customer Database</h1>
-                    <p className="text-slate-500 mt-2">Manage consumer demographics and bulk route processing points.</p>
+                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">{t('customers.title')}</h1>
+                    <p className="text-slate-500 mt-2">{t('customers.bulk_route_processing')}</p>
                 </div>
             </div>
 
@@ -83,23 +85,23 @@ export default function Customers() {
                     <div className="bg-white p-6 rounded-2xl shadow-sm border border-slate-200">
                         <h2 className="text-lg font-bold text-slate-800 flex items-center gap-2 mb-6">
                             <UserPlus className="w-5 h-5 text-emerald-500" />
-                            Register Customer
+                            {t('customers.register')}
                         </h2>
                         <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Full Name</label>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">{t('customers.name')}</label>
                                 <input {...register('name', { required: true })} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="e.g. Acme Corp" />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Address Location</label>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">{t('customers.address')}</label>
                                 <textarea {...register('address')} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none resize-none h-24" placeholder="123 Sector 4..." />
                             </div>
                             <div>
-                                <label className="block text-sm font-semibold text-slate-700 mb-1">Phone Number</label>
+                                <label className="block text-sm font-semibold text-slate-700 mb-1">{t('customers.phone')}</label>
                                 <input {...register('phone')} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-4 py-2 text-slate-800 focus:ring-2 focus:ring-emerald-500 outline-none" placeholder="+91..." />
                             </div>
                             <button type="submit" disabled={isAdding} className="w-full mt-4 bg-slate-800 hover:bg-slate-700 text-white font-medium py-2.5 rounded-lg transition-colors flex justify-center items-center gap-2 disabled:opacity-70">
-                                {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Register Client'}
+                                {isAdding ? <Loader2 className="w-4 h-4 animate-spin" /> : t('customers.register')}
                             </button>
                         </form>
                     </div>
@@ -110,20 +112,20 @@ export default function Customers() {
                         <div className="px-6 py-3 border-b border-slate-200">
                             <div className="relative">
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                                <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search customers..." className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
+                                <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
                             </div>
                         </div>
                         {isLoading ? (
                             <div className="p-12 flex justify-center"><Loader2 className="w-8 h-8 animate-spin text-emerald-500" /></div>
                         ) : filtered.length === 0 ? (
-                            <div className="p-12 text-center text-slate-500">No customers found.</div>
+                            <div className="p-12 text-center text-slate-500">{t('customers.no_customers')}</div>
                         ) : (
                             <table className="w-full text-left border-collapse">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-4 font-semibold text-slate-600">Client Info</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-600">Contact Details</th>
-                                        <th className="px-6 py-4 font-semibold text-slate-600 text-right">Actions</th>
+                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('customers.name')}</th>
+                                        <th className="px-6 py-4 font-semibold text-slate-600">{t('customers.phone')}</th>
+                                        <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
@@ -156,7 +158,7 @@ export default function Customers() {
                                             <td className="px-6 py-4 text-right">
                                                 {editId === cust.id ? (
                                                     <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={saveEdit} className="text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700">Save</button>
+                                                        <button onClick={saveEdit} className="text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700">{t('common.save')}</button>
                                                         <button onClick={() => setEditId(null)} className="text-xs text-slate-500 hover:text-slate-700"><X className="w-4 h-4" /></button>
                                                     </div>
                                                 ) : (
