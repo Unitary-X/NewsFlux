@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
+import { useTranslation } from 'react-i18next';
 import { Loader2, Plus, Trash2, Search, Route } from 'lucide-react';
 
 export default function Assignments() {
+    const { t } = useTranslation();
     const [assignments, setAssignments] = useState([]);
     const [workers, setWorkers] = useState([]);
     const [customers, setCustomers] = useState([]);
@@ -61,12 +63,12 @@ export default function Assignments() {
     };
 
     const deleteAssignment = async (id) => {
-        if (!confirm('Remove this route assignment?')) return;
+        if (!confirm(t('assignments.delete_confirm'))) return;
         try {
             await api.delete(`/admin/assignments/${id}`);
             fetchAll();
         } catch (err) {
-            alert('Failed to delete assignment');
+            alert(t('assignments.delete_fail'));
         }
     };
 
@@ -78,37 +80,37 @@ export default function Assignments() {
         <div className="max-w-6xl mx-auto">
             <div className="flex justify-between items-end mb-8">
                 <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Worker Assignments</h1>
-                    <p className="text-slate-500 mt-2">Assign customers to delivery workers with route ordering.</p>
+                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">{t('assignments.title')}</h1>
+                    <p className="text-slate-500 mt-2">{t('assignments.subtitle')}</p>
                 </div>
                 <button onClick={() => setShowForm(!showForm)} className="flex items-center gap-2 bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded-lg font-medium shadow-sm transition-colors">
-                    <Plus className="w-4 h-4" /> New Assignment
+                    <Plus className="w-4 h-4" /> {t('assignments.add')}
                 </button>
             </div>
 
             {showForm && (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6 mb-6">
-                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Route className="w-5 h-5 text-indigo-500" /> Assign Customer to Worker</h2>
+                    <h2 className="text-lg font-bold text-slate-800 mb-4 flex items-center gap-2"><Route className="w-5 h-5 text-indigo-500" /> {t('assignments.form_title')}</h2>
                     <form onSubmit={createAssignment} className="grid grid-cols-1 md:grid-cols-4 gap-4 items-end">
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Worker</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('assignments.worker')}</label>
                             <select value={form.worker_id} onChange={e => setForm({ ...form, worker_id: e.target.value })} required className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                                <option value="">Select worker...</option>
+                                <option value="">{t('common.search_placeholder')}</option>
                                 {workers.map(w => <option key={w.id} value={w.id}>{w.username}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Customer</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('assignments.customer')}</label>
                             <select value={form.customer_id} onChange={e => setForm({ ...form, customer_id: e.target.value })} required className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none">
-                                <option value="">Select customer...</option>
+                                <option value="">{t('common.search_placeholder')}</option>
                                 {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
                             </select>
                         </div>
                         <div>
-                            <label className="block text-sm font-semibold text-slate-700 mb-1">Route Order</label>
+                            <label className="block text-sm font-semibold text-slate-700 mb-1">{t('assignments.route_order')}</label>
                             <input type="number" min="0" value={form.route_order} onChange={e => setForm({ ...form, route_order: e.target.value })} className="w-full bg-slate-50 border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                         </div>
-                        <button type="submit" className="bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 rounded-lg transition-colors">Assign</button>
+                        <button type="submit" className="bg-slate-800 hover:bg-slate-700 text-white font-medium py-2 rounded-lg transition-colors">{t('assignments.assign')}</button>
                     </form>
                 </div>
             )}
@@ -116,13 +118,13 @@ export default function Assignments() {
             <div className="mb-4">
                 <div className="relative max-w-md">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder="Search by worker or customer..." className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
+                    <input value={search} onChange={e => setSearch(e.target.value)} placeholder={t('common.search_placeholder')} className="w-full pl-10 pr-4 py-2 bg-white border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                 </div>
             </div>
 
             {Object.keys(grouped).length === 0 ? (
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-12 text-center text-slate-500">
-                    No assignments found. Create one to assign customers to workers.
+                    {t('assignments.no_assignments')}
                 </div>
             ) : (
                 <div className="space-y-4">
@@ -132,15 +134,15 @@ export default function Assignments() {
                                 <div className="p-2 bg-indigo-100 rounded-lg"><Route className="w-4 h-4 text-indigo-600" /></div>
                                 <div>
                                     <h3 className="font-bold text-slate-800">{group.name}</h3>
-                                    <p className="text-xs text-slate-500">{group.assignments.length} customer{group.assignments.length !== 1 ? 's' : ''} assigned</p>
+                                    <p className="text-xs text-slate-500">{group.assignments.length} {group.assignments.length !== 1 ? t('assignments.customer_assigned') : t('customer')}</p>
                                 </div>
                             </div>
                             <table className="w-full text-left">
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200 text-sm">
                                         <th className="px-6 py-3 font-semibold text-slate-600 w-16">#</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Customer</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                                        <th className="px-6 py-3 font-semibold text-slate-600">{t('assignments.customer')}</th>
+                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-100">
