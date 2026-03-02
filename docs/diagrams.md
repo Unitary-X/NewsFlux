@@ -6,13 +6,13 @@ Visual representations of the NewsFlux Multi-Tenant SaaS platform architecture, 
 
 ## 🏗️ 1. Multi-Tenant Architecture (Shared Schema)
 
-Single backend and SQLite database securely handling multiple isolated agencies via `tenant_id` filtering in TenantMiddleware.
+Single backend and database securely handling multiple isolated agencies via `tenant_id` filtering in TenantMiddleware.
 
 ```mermaid
 graph TD
     subgraph NewsFlux Platform
         API[FastAPI Backend + TenantMiddleware]
-        DB[(SQLite Database)]
+        DB[(SQLite / PostgreSQL)]
         Celery[Celery + Redis]
     end
 
@@ -48,7 +48,7 @@ graph TD
 
 ---
 
-## 🗄️ 2. Entity Relationship Diagram (12 Tables)
+## 🗄️ 2. Entity Relationship Diagram (16 Tables)
 
 Complete ERD showing all implemented tables and their relationships.
 
@@ -62,13 +62,19 @@ erDiagram
     AGENCIES ||--o{ INVOICES : "bills"
     AGENCIES ||--o{ AUDIT_LOGS : "logs"
     AGENCIES ||--o{ CUSTOMER_SUBSCRIPTIONS : "subscriptions"
+    AGENCIES ||--o{ SALARIES : "pays"
+    AGENCIES ||--o{ DAILY_DELIVERIES : "records"
+    AGENCIES ||--o{ BACKUPS : "backs up"
     AGENCIES }o--|| BILLING_PLANS : "subscribed to"
     
     USERS ||--o{ WORKER_ASSIGNMENTS : "assigned"
     USERS ||--o{ AUDIT_LOGS : "performed by"
+    USERS ||--o{ SALARIES : "earns"
+    USERS ||--o{ DAILY_DELIVERIES : "delivers"
     CUSTOMERS ||--o{ CUSTOMER_SUBSCRIPTIONS : "has"
     CUSTOMERS ||--o{ WORKER_ASSIGNMENTS : "delivered to"
     CUSTOMERS ||--o{ INVOICES : "billed via"
+    CUSTOMERS ||--o{ DAILY_DELIVERIES : "receives"
     NEWSPAPERS ||--o{ CUSTOMER_SUBSCRIPTIONS : "included in"
     NEWSPAPERS ||--o{ DAILY_STOCK : "tracked as"
     
@@ -82,6 +88,7 @@ erDiagram
         text gdrive_refresh_token "encrypted"
         string gdrive_folder_id
         datetime gdrive_connected_at
+        string gdrive_oauth_state
     }
     
     USERS {
@@ -90,12 +97,16 @@ erDiagram
         string role "super_admin/admin/worker"
         string username "unique"
         string password_hash
+        string email
+        string reset_token
+        datetime reset_token_expires
     }
     
     NEWSPAPERS {
         UUID id PK
         UUID tenant_id FK
         string name
+        string language
         decimal base_price
     }
     
@@ -115,6 +126,7 @@ erDiagram
         int quantity
         decimal price "override"
         int status "1=active 0=paused"
+        string subscription_type "daily/weekly/monthly/yearly"
     }
     
     DAILY_STOCK {
@@ -144,6 +156,40 @@ erDiagram
         decimal total_amount
         decimal delivery_fee
         string status "pending/paid"
+    }
+    
+    SALARIES {
+        UUID id PK
+        UUID tenant_id FK
+        UUID worker_id FK
+        int month
+        int year
+        decimal base_salary
+        decimal bonus
+        decimal deductions
+        string status "pending/paid"
+    }
+    
+    DAILY_DELIVERIES {
+        UUID id PK
+        UUID tenant_id FK
+        UUID customer_id FK
+        UUID worker_id FK
+        date date
+        string status "delivered/missed"
+    }
+    
+    BACKUPS {
+        UUID id PK
+        UUID agency_id FK
+        string backup_name
+        string backup_type "daily/monthly/yearly"
+        string status "pending/completed/failed"
+        int file_size_bytes
+        string gdrive_file_id
+        string gdrive_web_link
+        datetime created_at
+        datetime completed_at
     }
     
     AUDIT_LOGS {
@@ -181,6 +227,13 @@ erDiagram
         bool is_active
         datetime expires_at
     }
+    
+    PLATFORM_SETTINGS {
+        UUID id PK
+        string setting_key "unique"
+        text setting_value
+        string setting_type
+    }
 ```
 
 ---
@@ -195,7 +248,7 @@ sequenceDiagram
     participant API as ⚙️ FastAPI
     participant Worker as 👷 Worker PWA
     participant IDB as 📱 IndexedDB
-    participant DB as 🗄️ SQLite
+    participant DB as 🗄️ Database
 
     Note over Admin, DB: 🌅 Morning Phase
     Admin->>API: POST /admin/stock (taken per newspaper)
@@ -204,19 +257,27 @@ sequenceDiagram
     Worker->>API: GET /worker/assignments
     API->>DB: Query assignments by worker_id + tenant_id
     API-->>Worker: Customer list with route order
+    
+    Worker->>API: GET /worker/route
+    API-->>Worker: Ordered delivery stops with details
 
     Note over Worker, IDB: 🚴 Distribution Phase (Possibly Offline)
     Worker->>IDB: Cache delivery updates locally
     Worker->>Worker: Deliver newspapers on route
+    Worker->>IDB: Toggle delivery status per customer
 
     Note over Worker, DB: 🌇 Evening Phase
     Worker->>IDB: Enter returned quantities
     IDB-->>API: POST /worker/offline-sync (auto when online)
-    API->>DB: Process batch updates
+    API->>DB: Process batch updates + DailyDelivery records
     
     Note over API, DB: ⚡ Automated
     DB->>DB: sold = taken - returned (computed)
     API-->>Admin: Dashboard stats updated
+    
+    Note over Worker, API: 📊 Self-Service
+    Worker->>API: GET /worker/sales (7-day trends)
+    Worker->>API: GET /worker/salary (history + totals)
 ```
 
 ---
@@ -227,13 +288,14 @@ sequenceDiagram
 sequenceDiagram
     participant Admin as 🏢 Admin
     participant API as ⚙️ FastAPI
-    participant DB as 🗄️ SQLite
+    participant DB as 🗄️ Database
 
     Admin->>API: POST /admin/billing/generate
     API->>DB: Query active subscriptions for month
     
     loop For each customer
-        API->>API: Calculate TotalBill = Σ(Price × Qty × Days) + DeliveryFee
+        API->>DB: Query DailyDelivery records for missed days
+        API->>API: Calculate TotalBill = Σ(Price × Qty × Days) + DeliveryFee - MissedDays
         API->>DB: Insert invoice (status: pending)
     end
     
@@ -243,6 +305,10 @@ sequenceDiagram
     
     Admin->>API: PUT /admin/invoices/{id}/pay
     API->>DB: Update status to "paid"
+    
+    Note over Admin, API: 💼 Salary Management
+    Admin->>API: POST /admin/salaries (create salary records)
+    Admin->>API: PUT /admin/salaries/{id}/pay (mark paid)
 ```
 
 ---
@@ -291,25 +357,16 @@ flowchart TD
     Check -->|admin| AD["/admin/dashboard"]
     Check -->|worker| WK["/worker/dashboard"]
     
-    SA --> SA_Pages["7 pages: Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings"]
-    AD --> AD_Pages["9 pages: Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup"]
-    WK --> WK_Pages["1 page: Assignments + Offline Sync"]
-```
-
----
-
-## 🛡️ 7. Tenant Isolation Flow
-
-```mermaid
-flowchart LR
-    Request["HTTP Request"] --> MW["TenantMiddleware"]
-    MW --> Open{"Open route?"}
-    Open -->|Yes| Pass["Skip auth"]
-    Open -->|No| Decode["Decode JWT"]
-    Decode --> Extract["Extract tenant_id, role, user_id"]
-    Extract --> Inject["Inject into request.state"]
-    Inject --> RoleCheck{"Has tenant_id OR super_admin?"}
-    RoleCheck -->|No| Reject["403: Tenant ID required"]
-    RoleCheck -->|Yes| Handler["Route Handler"]
-    Handler --> Query["DB query filtered by tenant_id"]
+    SA --> SA_Pages["8 pages: Agencies, Analytics, Announcements,<br/>AuditLogs, SystemHealth, Settings, Backup"]
+    AD --> AD_Pages["12 pages: Stock, Newspapers, Workers, Customers,<br/>Subscriptions, Assignments, Billing, Backup,<br/>Reports, Salaries, PricingGrid"]
+    WK --> WK_Pages["4 pages: MySales, MySalary, RouteView"]
+    
+    Forgot["/forgot-password"] --> ResetReq["POST /auth/forgot-password"]
+    ResetReq --> Token["Reset token generated"]
+    Token --> Reset["/reset-password"]
+    Reset --> ResetPw["POST /auth/reset-password"]
+    
+    JWT --> Refresh["Auto-refresh every 10 min"]
+    Refresh --> RefreshAPI["POST /auth/refresh"]
+    RefreshAPI --> NewJWT["New access token issued"]
 ```

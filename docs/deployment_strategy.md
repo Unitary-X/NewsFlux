@@ -1,6 +1,6 @@
 # 🚀 NewsFlux: Deployment Strategy Analysis
 
-This document analyzes the deployment approach for the NewsFlux Multi-Tenant SaaS platform. The core requirement is to handle the FastAPI backend, PostgreSQL database, background Celery workers, and React frontends (Super Admin, Agency Admin, Worker PWA).
+This document analyzes the deployment approach for the NewsFlux Multi-Tenant SaaS platform. The core requirement is to handle the FastAPI backend, PostgreSQL database, background Celery workers, and the React SPA (single page application with role-based routing for all three roles).
 
 ---
 
@@ -55,10 +55,10 @@ If you want a more robust, "hands-off" or highly scalable approach compared to r
 ### 🚀 Phase 1: The MVP (0 to 10 Agencies)
 Stick to your original plan: **Docker Compose on a single VPS (e.g., DigitalOcean or Hetzner).**
 - It's cheap, fast to deploy, and forces you to containerize everything correctly from day one.
-- Use **Traefik** or **Nginx Proxy Manager** in your `docker-compose.yml` to automatically handle SSL certificates and routing for your 3 different React subdomains (e.g., `admin.newsflux.com`, `worker.newsflux.com`).
+- Use **Traefik** or **Nginx Proxy Manager** in your `docker-compose.yml` to automatically handle SSL certificates and routing. NewsFlux is a single SPA with role-based routing — no separate subdomains needed.
 
 ### 📈 Phase 2: Growth (10 to 100+ Agencies)
 Move to **The Hybrid Model:**
-- Move all 3 React frontends (Worker, Admin, Super Admin) to **Vercel** for lightning-fast global delivery.
+- Move the React SPA to **Vercel** for lightning-fast global delivery.
 - Keep the FastAPI backend in Docker on your VPS.
 - Move the PostgreSQL database from a Docker container to a **Managed Database Service** (like AWS RDS or DigitalOcean Managed DB). This guarantees automated point-in-time recovery, high availability, and takes the stress of data loss completely off your shoulders—critical for a B2B SaaS.

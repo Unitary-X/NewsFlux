@@ -1,13 +1,19 @@
-# Google Drive Backup — Implementation Plan
+# 💾 Google Drive Backup — Implementation Guide
 
 ## Overview
+
+NewsFlux supports automated Google Drive backups for agency data via OAuth2 per-agency authentication. Agency admins connect their own Google account and backups go to their personal Google Drive.
 
 Two backup modes depending on user role:
 
 | Mode | Who | Auth Method | Where Backups Go |
 |------|-----|------------|-----------------|
-| **Central Backup** | Super Admin | Service Account (JSON key) | Super Admin's Google Drive |
-| **Agency Backup** | Agency Admin | Google OAuth (Sign in with Google) | Admin's own Google Drive |
+| **Agency Backup** | Agency Admin | Google OAuth2 (Sign in with Google) | Admin's own Google Drive |
+| **Platform Backup** | Super Admin | Google OAuth2 | Super Admin's Google Drive |
+
+---
+
+## Backup Structure
 
 Each agency gets Excel file backups organized into 3 folders:
 
@@ -29,30 +35,25 @@ NewsFlux Backups/
         └── ...
 ```
 
----
-
-## Folder Contents
-
-### 📅 Daily Updates (runs every day)
-| File | Sheets / Content |
-|------|-----------------|
+### 📅 Daily Updates
+| File | Content |
+|------|---------|
 | `{date}_daily_stock.xlsx` | Per-newspaper: Taken, Returned, Sold, Revenue |
 | `{date}_deliveries.xlsx` | Per-worker: Customers delivered, pending, route info |
 
-### 📊 Monthly Analysis (runs on 1st of each month)
-| File | Sheets / Content |
-|------|-----------------|
+### 📊 Monthly Analysis
+| File | Content |
+|------|---------|
 | `{month}_revenue_report.xlsx` | Daily revenue breakdown, totals, averages, trends |
 | `{month}_subscription_summary.xlsx` | Active/paused subscriptions, customer × newspaper matrix |
 | `{month}_invoice_report.xlsx` | All invoices: customer, amount, delivery_fee, paid/pending status |
-| `{month}_worker_performance.xlsx` | Per-worker: deliveries completed, customers served, route efficiency |
+| `{month}_worker_performance.xlsx` | Per-worker: deliveries completed, customers served |
 
-### 📈 Yearly Analysis (runs on Jan 1st)
-| File | Sheets / Content |
-|------|-----------------|
+### 📈 Yearly Analysis
+| File | Content |
+|------|---------|
 | `{year}_annual_report.xlsx` | Monthly revenue trend, total P&L, customer/worker growth |
 | `{year}_customer_growth.xlsx` | New customers per month, churn, retention rate |
-| `{year}_subscription_trends.xlsx` | Newspaper popularity, subscription changes over time |
 
 ---
 
@@ -61,14 +62,18 @@ NewsFlux Backups/
 ### Backend Components
 
 ```
-backend/
-├── app/
-│   └── services/
-│       ├── gdrive_service.py      # Google Drive API wrapper (both OAuth + Service Account)
-│       ├── excel_export.py        # openpyxl Excel generation
-│       └── backup_scheduler.py    # Celery Beat tasks
-│   └── api/v1/
-│       └── admin.py               # OAuth callback + backup endpoints
+backend/app/
+├── services/
+│   ├── google_drive.py        # OAuth2 flow + Drive API wrapper (backup.py router)
+│   ├── gdrive_service.py      # Google Drive functions (admin.py / superadmin.py)
+│   ├── excel_export.py        # openpyxl Excel generation
+│   └── backup_scheduler.py    # Celery Beat scheduled tasks
+├── api/v1/
+│   ├── backup.py              # Dedicated backup router (7 endpoints)
+│   ├── admin.py               # Admin backup endpoints (8 endpoints)
+│   └── superadmin.py          # SA backup/DB management endpoints (16 endpoints)
+└── models/
+    └── models.py              # Backup model + Agency gdrive columns
 ```
 
 ### How It Works
@@ -81,110 +86,139 @@ backend/
 2. **Excel Export Service** (`openpyxl`) queries the DB per agency and generates `.xlsx` files with formatted sheets, headers, and auto-column-widths
 
 3. **Google Drive Service** (`google-api-python-client`):
-   - **Super Admin path:** Authenticates via Service Account JSON key → uploads to central Drive
-   - **Agency Admin path:** Authenticates via stored OAuth refresh token → uploads to admin's own Drive
+   - Authenticates via stored OAuth refresh token
    - Creates folder structure if not exists: `NewsFlux Backups/{Agency Name}/{Daily|Monthly|Yearly}`
    - Uploads Excel files to the correct folder
 
-4. **API Endpoints** for manual control:
-   - `GET /admin/backup/google/connect` — Redirects admin to Google OAuth consent screen
-   - `GET /admin/backup/google/callback` — Handles OAuth callback, stores refresh token
-   - `GET /admin/backup/google/status` — Check if Google Drive is connected
-   - `DELETE /admin/backup/google/disconnect` — Remove stored Google credentials
-   - `POST /admin/backup/trigger` — Manual daily backup trigger
-   - `GET /admin/backup/history` — List past backups with Drive links
-   - `POST /superadmin/backup/trigger-all` — Trigger backup for all agencies (uses service account)
+---
 
-### Dependencies (added to requirements.txt)
-```
-openpyxl>=3.1.0
-google-api-python-client>=2.100.0
-google-auth>=2.23.0
-google-auth-oauthlib>=1.1.0
-```
+## API Endpoints
+
+### Admin Backup (in `admin.py`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/admin/backup/google/connect` | Redirect to Google OAuth consent |
+| GET | `/admin/backup/google/callback` | Handle OAuth callback |
+| GET | `/admin/backup/google/status` | Check if Drive is connected |
+| DELETE | `/admin/backup/google/disconnect` | Remove stored credentials |
+| POST | `/admin/backup/trigger` | Manual daily backup |
+| POST | `/admin/backup/trigger-monthly` | Manual monthly backup |
+| POST | `/admin/backup/trigger-yearly` | Manual yearly backup |
+| GET | `/admin/backup/files/{subfolder}` | Browse backup files |
+
+### Backup Router (in `backup.py` — `/api/v1/backup`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/status` | Check Google Drive connection |
+| GET | `/google/auth-url` | Get OAuth authorization URL |
+| GET | `/google/callback` | Handle OAuth callback (open route) |
+| POST | `/disconnect-google` | Remove connection |
+| POST | `/trigger-backup` | Trigger manual backup |
+| GET | `/list` | List backup records |
+| DELETE | `/delete/{backup_id}` | Delete a backup |
+
+### Super Admin Backup (in `superadmin.py`)
+| Method | Endpoint | Purpose |
+|--------|----------|---------|
+| GET | `/superadmin/backup/agencies` | List agencies with backup status |
+| GET | `/superadmin/backup/{id}/files/{subfolder}` | Browse agency backups |
+| POST | `/superadmin/backup/{id}/trigger` | Trigger agency daily backup |
+| POST | `/superadmin/backup/{id}/trigger-monthly` | Trigger agency monthly backup |
+| POST | `/superadmin/backup/{id}/trigger-yearly` | Trigger agency yearly backup |
+| POST | `/superadmin/backup/trigger-all` | Backup all agencies |
+| GET | `/superadmin/backup/db/export-json` | Export full DB as JSON |
+| GET | `/superadmin/backup/db/export-sql` | Export full DB as SQL |
+| GET | `/superadmin/backup/db/stats` | DB stats (row counts per table) |
+| POST | `/superadmin/backup/db/upload` | Restore from JSON |
+| POST | `/superadmin/backup/db/upload-sql` | Restore from SQL |
+| GET | `/superadmin/backup/gdrive/status` | SA Drive connection status |
+| GET | `/superadmin/backup/gdrive/connect` | SA Drive OAuth connect |
+| GET | `/superadmin/backup/gdrive/callback` | SA Drive OAuth callback |
+| POST | `/superadmin/backup/gdrive/disconnect` | SA Drive disconnect |
+| POST | `/superadmin/backup/gdrive/upload-db` | Upload DB to SA's Drive |
 
 ---
 
-## Agency Admin Flow (OAuth — Easy Way)
+## Agency Admin OAuth Flow
 
-### How the Admin Experiences It
-
-1. Admin goes to **Settings** or **Backup** page in the dashboard
+### User Experience
+1. Admin goes to **Backup** page in the dashboard
 2. Clicks **"Connect Google Drive"** button
 3. Google login popup appears → admin signs in with their Google account
-4. Clicks **"Allow"** to grant Drive file access
-5. Done! Backups now automatically go to their personal Google Drive
+4. Clicks **"Allow"** to grant Drive file access (`drive.file` scope)
+5. Backups now automatically go to their personal Google Drive
 6. Admin can click **"Backup Now"** anytime for a manual export
 7. Admin can **"Disconnect"** at any time to revoke access
 
-### What Happens Behind the Scenes
-
+### Behind the Scenes
 ```
 Admin clicks "Connect"
-    → Frontend opens: /api/v1/admin/backup/google/connect
-    → Backend redirects to Google OAuth consent URL
+    → Frontend redirects to: /api/v1/backup/google/auth-url
+    → Backend generates OAuth URL with PKCE code challenge
+    → Backend stores state in Agency.gdrive_oauth_state (maps state → agency)
+    → Admin redirected to Google OAuth consent
     → Admin logs into Google, clicks Allow
-    → Google redirects back to: /api/v1/admin/backup/google/callback?code=AUTH_CODE
+    → Google redirects to: /api/v1/backup/google/callback?code=AUTH_CODE&state=STATE
     → Backend exchanges auth code for access_token + refresh_token
-    → refresh_token is encrypted and stored in DB (Agency.gdrive_refresh_token)
-    → Admin is redirected back to dashboard with success message
+    → refresh_token encrypted with Fernet and stored in Agency.gdrive_refresh_token
+    → Admin redirected back to frontend with success message
 ```
 
-For scheduled backups, the backend uses the stored **refresh token** to get a fresh access token — no user interaction needed. Tokens auto-renew indefinitely as long as the admin doesn't revoke access.
-
-### Database Change
-
-Add to `Agency` model:
+### Database Columns (Agency model)
 ```python
-gdrive_refresh_token = Column(String, nullable=True)   # Encrypted OAuth refresh token
-gdrive_folder_id = Column(String, nullable=True)        # Root backup folder ID in admin's Drive
-gdrive_connected_at = Column(DateTime, nullable=True)   # When Drive was connected
+gdrive_refresh_token = Column(Text, nullable=True)      # Encrypted OAuth refresh token
+gdrive_folder_id = Column(String, nullable=True)         # Root backup folder ID
+gdrive_connected_at = Column(DateTime, nullable=True)    # When Drive was connected
+gdrive_oauth_state = Column(String(512), nullable=True)  # OAuth state for callback mapping
+```
+
+### Backup Model
+```python
+class Backup:
+    id              # UUID primary key
+    agency_id       # FK to agencies
+    backup_name     # Human-readable name
+    backup_type     # daily / monthly / yearly
+    status          # pending / completed / failed
+    file_size_bytes # File size
+    gdrive_file_id  # Google Drive file ID
+    gdrive_web_link # Direct link to file
+    error_message   # Error details if failed
+    created_at      # When backup was initiated
+    completed_at    # When backup finished
 ```
 
 ---
 
 ## Google API Setup
 
-### One-Time Setup (You do this once for the whole platform)
+### One-Time Setup (platform-level)
 
-#### 1. Create a Google Cloud Project
+#### 1. Create Google Cloud Project
 - Go to [Google Cloud Console](https://console.cloud.google.com/)
-- Click **"New Project"** → Name it `newsflux-backups` → Create
+- Create new project → Name: `newsflux-backups`
 
 #### 2. Enable Google Drive API
-- In the project, go to **APIs & Services → Library**
-- Search for **"Google Drive API"** → Click **Enable**
+- APIs & Services → Library → Search "Google Drive API" → Enable
 
-#### 3. Create OAuth Client ID (for Agency Admins)
-- Go to **APIs & Services → Credentials**
-- Click **"Create Credentials" → "OAuth client ID"**
+#### 3. Create OAuth Client ID
+- APIs & Services → Credentials → Create Credentials → OAuth client ID
 - Application type: **Web application**
-- Name: `NewsFlux Backup`
-- Authorized redirect URIs: `https://yourdomain.com/api/v1/admin/backup/google/callback` (and `http://localhost:8000/api/v1/admin/backup/google/callback` for dev)
-- Click **Create** → Copy the **Client ID** and **Client Secret**
+- Authorized redirect URIs:
+  - Production: `https://yourdomain.com/api/v1/backup/google/callback`
+  - Development: `http://localhost:8000/api/v1/backup/google/callback`
 
 #### 4. Configure OAuth Consent Screen
-- Go to **APIs & Services → OAuth consent screen**
 - User Type: **External**
 - App name: `NewsFlux`
-- Scopes: Add `https://www.googleapis.com/auth/drive.file` (only access files created by the app)
-- Save
+- Scopes: `https://www.googleapis.com/auth/drive.file` (only access files created by the app)
 
-#### 5. (Optional) Create Service Account for Super Admin
-- Only needed if super admin wants centralized backups
-- Go to **Credentials → Create Credentials → Service Account**
-- Download JSON key → place at `backend/gdrive_credentials.json`
-
-#### 6. Add Environment Variables
+#### 5. Environment Variables (`.env`)
 ```env
-# OAuth (for agency admins — required)
+# OAuth credentials (required)
 GOOGLE_CLIENT_ID=your_oauth_client_id
 GOOGLE_CLIENT_SECRET=your_oauth_client_secret
-GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/admin/backup/google/callback
-
-# Service Account (for super admin — optional)
-GDRIVE_CREDENTIALS_PATH=gdrive_credentials.json
-GDRIVE_ROOT_FOLDER_ID=your_folder_id_here
+GOOGLE_REDIRECT_URI=http://localhost:8000/api/v1/backup/google/callback
 
 # Feature flag
 GDRIVE_ENABLED=true
@@ -192,49 +226,22 @@ GDRIVE_ENABLED=true
 
 ---
 
-## Comparison: OAuth vs Service Account
+## Security
 
-| | OAuth (Agency Admin) | Service Account (Super Admin) |
-|---|---|---|
-| **Setup difficulty** | Easy — admin just clicks "Sign in with Google" | Harder — needs JSON key file + folder sharing |
-| **Where files go** | Admin's own Google Drive | Central platform Drive |
-| **Who controls data** | The agency admin | The super admin |
-| **Needs JSON key?** | No | Yes |
-| **Admin can browse files?** | Yes, in their own Drive | Only if folder is shared with them |
-| **Best for** | Self-service per agency | Platform-wide centralized backup |
+- **Token Encryption:** OAuth refresh tokens are encrypted with Fernet (derived from `SECRET_KEY`) before database storage
+- **Minimal Scope:** Only `drive.file` scope — app can only access files it creates, not the user's entire Drive
+- **PKCE:** OAuth flow uses code challenge for additional security
+- **State Parameter:** Random state string prevents CSRF attacks on the callback
+- **Per-Agency Isolation:** Each agency's tokens stored separately; admins can only access their own backups
 
 ---
 
-## Cost
+## Dependencies
 
-**Free.** Google Drive API has generous limits:
-- 15 GB free storage per Google account
-- 1 billion API calls/day quota (effectively unlimited)
-- No per-call charges
-
-For a newspaper agency SaaS, daily Excel files are tiny (< 100 KB each). Even with 100 agencies, yearly storage would be under 1 GB.
-
----
-
-## Security Notes
-
-- OAuth refresh tokens are **encrypted** before storing in DB (using app SECRET_KEY)
-- Service account key (`gdrive_credentials.json`) must NEVER be committed to Git
-- OAuth scope is `drive.file` — app can only access files **it created**, not the user's entire Drive
-- Admin can revoke access anytime from the app UI or from [Google Account permissions](https://myaccount.google.com/permissions)
-- All uploads are audited in the audit_logs table
-
----
-
-## Status: ✅ IMPLEMENTED
-
-**Implementation commit:** `a4bdf3c` (pushed to `origin/main`)
-
-### Implemented Files:
-- `backend/app/services/gdrive_service.py` — Google Drive OAuth2 + upload
-- `backend/app/services/excel_export.py` — openpyxl Excel generation
-- `backend/app/services/backup_scheduler.py` — Scheduled backup triggers
-- `backend/app/api/v1/admin.py` — 8 backup API endpoints
-- `frontend/src/pages/admin/Backup.jsx` — Backup management page
-- `frontend/src/components/admin/Sidebar.jsx` — Backup nav link added
-- `frontend/src/locales/en.json` + `ta.json` — i18n translations
+```
+google-api-python-client>=2.100.0
+google-auth>=2.23.0
+google-auth-oauthlib>=1.1.0
+openpyxl>=3.1.0
+cryptography>=41.0.0
+```

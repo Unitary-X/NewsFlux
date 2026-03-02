@@ -21,9 +21,9 @@ A single React SPA with role-based routing after login:
 
 | Role | Interface | Key Features |
 |------|-----------|-------------|
-| **👑 Super Admin** | Dark-mode glassmorphism dashboard | Agency CRUD, Analytics (KPIs, growth, churn), Audit Logs, System Health/APM, God Mode (impersonation), Templates, Announcements, Billing Plans |
-| **🏢 Admin** | Dense data-entry ledger UI | Newspapers, Workers, Customers, Stock Entry, Subscriptions, Assignments, Billing/Invoices, Google Drive Backup, Dashboard with charts |
-| **👷 Worker** | Mobile-first offline PWA | View assignments, enter Taken/Returned with stepper inputs, toggle delivery status, IndexedDB + background sync |
+| **👑 Super Admin** | Dark-mode glassmorphism dashboard | Agency CRUD, Analytics (KPIs, growth, churn), Audit Logs, System Health/APM, God Mode (impersonation), Templates, Announcements, Billing Plans, Backup/Restore, Settings |
+| **🏢 Admin** | Dense data-entry ledger UI | Newspapers, Workers, Customers, Stock Entry, Subscriptions, Assignments, Billing/Invoices, Salaries, Reports (P&L, Stock, Performance), Pricing Grid, Google Drive Backup, Dashboard with charts |
+| **👷 Worker** | Mobile-first offline PWA | View assignments, enter Taken/Returned with stepper inputs, toggle delivery status, My Sales (7-day trends), My Salary, Route View, IndexedDB + background sync |
 
 ---
 
@@ -33,9 +33,10 @@ A single React SPA with role-based routing after login:
 - **Framework:** Python 3.11+ / FastAPI
 - **Database:** SQLite (local dev) / PostgreSQL (production) — Shared-Schema Multi-Tenancy
 - **ORM:** SQLAlchemy 2.0 with Pydantic v2 schemas
-- **Auth:** JWT (python-jose) with role claims (`sub`, `role`, `tenant_id`)
-- **Background Jobs:** Celery + Redis (billing cron, Google Drive backups)
-- **Backup:** Google Drive API with OAuth2 per-agency + openpyxl Excel exports
+- **Auth:** JWT (python-jose) with role claims (`sub`, `role`, `tenant_id`) + refresh tokens
+- **Background Jobs:** Celery + Redis (billing cron, Google Drive backups, email notifications)
+- **Backup:** Google Drive API with OAuth2 per-agency + openpyxl Excel exports + DB export/import
+- **Email:** SMTP email service via Celery tasks
 
 ### Frontend
 - **Framework:** React 19 + Vite 7
@@ -55,7 +56,7 @@ newspaper-boy/
 ├── README.md
 ├── docker-compose.yml
 ├── docs/
-│   ├── architecture.md              # DB schema & API structure
+│   ├── architecture.md              # DB schema (16 tables) & API structure (111 endpoints)
 │   ├── core_modules.md              # Business modules & page flow
 │   ├── system_flow.md               # Daily/monthly operational flow
 │   ├── roles_and_permissions.md     # RBAC definition
@@ -63,32 +64,31 @@ newspaper-boy/
 │   ├── deployment_strategy.md       # Docker/PaaS/K8s options
 │   ├── own_server.md                # TrueNAS bare-metal guide
 │   ├── super admin frontend .md     # Antigravity UI spec
-│   ├── superadmin_addons.md         # Phase 2 super admin features
-│   ├── gdrive_backup.md             # Google Drive backup plan
-│   └── missing_features.md          # Gap analysis & roadmap
+│   ├── superadmin_addons.md         # Super admin enterprise features
+│   └── gdrive_backup.md             # Google Drive backup implementation
 ├── backend/
 │   ├── app/
 │   │   ├── main.py                  # FastAPI app + lifespan
-│   │   ├── api/v1/                  # auth, admin, worker, superadmin routers
-│   │   ├── core/                    # config, security, middleware, celery
-│   │   ├── models/models.py         # 12 SQLAlchemy models
+│   │   ├── api/v1/                  # auth, admin, worker, superadmin, backup routers
+│   │   ├── core/                    # config, security, middleware, celery, audit, metrics
+│   │   ├── models/models.py         # 16 SQLAlchemy models
 │   │   ├── schemas/                 # Pydantic request/response schemas
-│   │   ├── services/                # excel_export, gdrive_service, backup_scheduler, billing_job
+│   │   ├── services/                # google_drive, gdrive_service, excel_export, backup_scheduler, billing_job, email
 │   │   └── db/base_class.py         # SQLAlchemy Base
 │   ├── alembic/                     # Database migrations
-│   └── requirements.txt             # 18 Python dependencies
+│   └── requirements.txt
 ├── frontend/
 │   ├── src/
 │   │   ├── App.jsx                  # Route definitions (admin/worker/superadmin)
-│   │   ├── pages/admin/             # Dashboard, Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup
-│   │   ├── pages/worker/            # Dashboard (offline-first PWA)
-│   │   ├── pages/superadmin/        # Dashboard, Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings
-│   │   ├── components/              # AdminLayout, Sidebar, SuperAdminLayout, ImpersonationBanner, AnnouncementBanner
-│   │   ├── contexts/AuthContext.jsx # JWT auth + role routing
-│   │   ├── hooks/useSyncQueue.js    # Offline sync logic
+│   │   ├── pages/admin/             # 12 pages: Dashboard, Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup, Reports, Salaries, PricingGrid
+│   │   ├── pages/worker/            # 4 pages: Dashboard, MySales, MySalary, RouteView
+│   │   ├── pages/superadmin/        # 8 pages: Dashboard, Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings, Backup
+│   │   ├── components/              # AdminLayout, Sidebar, TableControls, SuperAdminLayout, ErrorBoundary, ImpersonationBanner, AnnouncementBanner
+│   │   ├── contexts/AuthContext.jsx # JWT auth + role routing + auto-refresh
+│   │   ├── hooks/                   # useSyncQueue, useTableControls
 │   │   ├── locales/                 # en.json, ta.json
-│   │   └── utils/                   # api.js (axios), db.js (Dexie)
-│   └── package.json                 # 17 npm dependencies
+│   │   └── utils/                   # api.js (axios + token refresh), db.js (Dexie), validation.js
+│   └── package.json
 ```
 
 ---
@@ -120,11 +120,11 @@ npm run dev
 The frontend dev server proxies `/api` requests to `http://localhost:8000`.
 
 ### Default Super Admin
-Create one manually:
-```bash
-cd backend
-python create_admin.py
-```
+A super admin account is created automatically on first startup:
+- **Username:** `superadmin`
+- **Password:** `admin123`
+
+Change the password immediately after first login.
 
 ### Docker (Production)
 ```bash
@@ -137,7 +137,7 @@ docker-compose up -d
 
 | Document | Description |
 |----------|-------------|
-| [Architecture](docs/architecture.md) | Database schema, API structure, component layout |
+| [Architecture](docs/architecture.md) | Database schema (16 tables), API structure (111 endpoints), component layout |
 | [Core Modules](docs/core_modules.md) | Business logic modules & page flow |
 | [System Flow](docs/system_flow.md) | Daily & monthly operational workflow |
 | [Roles & Permissions](docs/roles_and_permissions.md) | RBAC rules for all 3 roles |
@@ -145,9 +145,8 @@ docker-compose up -d
 | [Deployment Strategy](docs/deployment_strategy.md) | Docker, PaaS, Hybrid, K8s analysis |
 | [TrueNAS Guide](docs/own_server.md) | Bare-metal self-hosting on TrueNAS |
 | [Super Admin UI Spec](docs/super%20admin%20frontend%20.md) | Antigravity glassmorphism design rules |
-| [Super Admin Add-ons](docs/superadmin_addons.md) | Phase 2 enterprise features |
-| [Google Drive Backup](docs/gdrive_backup.md) | Per-agency Excel export to Google Drive |
-| [Gap Analysis](docs/missing_features.md) | Feature audit & remaining roadmap |
+| [Super Admin Add-ons](docs/superadmin_addons.md) | Enterprise features (all implemented) |
+| [Google Drive Backup](docs/gdrive_backup.md) | Per-agency OAuth2 Excel export to Google Drive |
 
 ---
 
@@ -158,6 +157,8 @@ docker-compose up -d
 3. **Celery Beat:** Automated monthly billing (`billing_job`) and Google Drive backups (`backup_scheduler` — daily/monthly/yearly).
 4. **Impersonation:** Super admin generates short-lived admin JWTs to debug agencies, all actions are audit-logged.
 5. **APM Metrics:** Middleware collects per-request latency and status codes; super admin views P50/P95/P99 in System Health page.
+6. **Refresh Tokens:** Access tokens expire in 15 minutes; refresh tokens (30 days) auto-renew via frontend interceptors.
+7. **PWA Service Worker:** Network-first caching strategy with offline fallback page for workers in low-connectivity areas.
 
 ---
 

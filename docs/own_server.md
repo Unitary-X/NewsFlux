@@ -14,8 +14,8 @@
 **A React PWA** is static; serving it takes virtually no CPU or memory.
 The biggest resource hogs will be **ZFS itself** and **PostgreSQL**.
 
-### ⚖️ Impact of Super Admin Add-ons (Phase 2)
-The advanced enterprise features outlined in Phase 2 won't break this server, but require specific considerations:
+### ⚖️ Impact of Super Admin Add-ons (All Implemented ✅)
+The advanced enterprise features are all implemented and won't break this server, but require specific considerations:
 
 **🟢 Low Impact (Logical Features)**
 - **Automated SaaS Billing:** Handled effortlessly by database queries and Fast API cron jobs.
@@ -58,9 +58,8 @@ Using a **Cloudflare Tunnel (`cloudflared`)** instead of port-forwarding your ho
 1. **Zero Trust Security:** You expose **NO** open ports on your home router. The tunnel dials out from your TrueNAS server to Cloudflare.
 2. **DDoS Protection:** Because traffic goes through Cloudflare's edge nodes natively, your little i3 processor won't get crippled by bot scanners randomly pinging IP addresses.
 3. **Free HTTPS (SSL):** Cloudflare handles all the Let's Encrypt certificates automatically at the edge.
-4. **Subdomain Routing:** The tunnel can natively route different domains to different Docker containers perfectly:
-   - `admin.newsflux.in` -> Routes internally to React Admin Container (`localhost:3000`)
-   - `worker.newsflux.in` -> Routes internally to React PWA Container (`localhost:3001`)
+4. **Subdomain Routing:** The tunnel can route different paths to your single-SPA container and API backend:
+   - `newsflux.in` -> Routes to React SPA Container (role-based routing handles admin/worker/superadmin)
    - `api.newsflux.in` -> Routes internally to FastAPI backend (`localhost:8000`)
 ---
 ## 🚀 Summary Checklist for TrueNAS Deployment
@@ -72,7 +71,4 @@ Using a **Cloudflare Tunnel (`cloudflared`)** instead of port-forwarding your ho
    - Mount the SSD dataset via virtio and run plain Docker Engine. 
    - Deploy your `docker-compose.yml` (PostgreSQL, FastAPI, React PWA, Celery/Redis).
 4. **Cloudflare Tunnel App:** Install the official Cloudflare Tunnel app (or standalone docker container) and connect it to your Cloudflare dashboard using your tunnel token to route traffic to your apps without exposing ports.
-5. **Phase 2 Expansion (Add-ons):**
-   - **SaaS Billing:** Configure Stripe/Razorpay webhooks in FastAPI. Requires zero hardware changes.
-   - **God Mode & Master Templates:** Implement logical changes in the backend database. Requires zero hardware changes.
-   - **Metrics & APM:** Create a free account on Sentry (or equivalent cloud service) and configure the FastAPI DSN to ship telemetry externally to prevent local memory exhaustion.
+5. **Post-Deployment:** All Phase 2 features (SaaS Billing Plans, God Mode, Templates, Analytics, Announcements, Settings, Backup) are already implemented in the codebase. For APM, use a cloud-hosted service (e.g., Sentry free tier) to avoid local memory exhaustion.

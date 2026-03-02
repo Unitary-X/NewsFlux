@@ -18,29 +18,29 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 **Role value:** `super_admin`
 **Tenant ID:** `null`
 
-### Endpoints (16):
-| Permission | Endpoint |
-|------------|----------|
-| List all agencies | `GET /superadmin/agencies` |
-| View agency detail | `GET /superadmin/agencies/{id}` |
-| Suspend/activate agency | `PUT /superadmin/agencies/{id}/status` |
-| Assign billing plan | `PUT /superadmin/agencies/{id}/plan` |
-| Delete agency | `DELETE /superadmin/agencies/{id}` |
-| Platform analytics | `GET /superadmin/analytics` |
-| Growth trends | `GET /superadmin/analytics/trends` |
-| Growth metrics | `GET /superadmin/analytics/growth` |
-| Top agencies | `GET /superadmin/analytics/top-agencies` |
-| Churn tracking | `GET /superadmin/analytics/churn` |
-| Audit logs | `GET /superadmin/audit-logs` |
-| System health | `GET /superadmin/system-health` |
-| Create super admin | `POST /superadmin/super-admins` |
-| List super admins | `GET /superadmin/super-admins` |
-| Delete super admin | `DELETE /superadmin/super-admins/{id}` |
-| Impersonate agency | `POST /superadmin/impersonate/{agency_id}` |
+### Endpoints (46):
+| Category | Endpoints |
+|----------|-----------|
+| **Agency Management** | `GET /agencies`, `GET /{id}`, `PUT /{id}/status`, `PUT /{id}/plan`, `DELETE /{id}` |
+| **Analytics** | `GET /analytics`, `/analytics/trends`, `/analytics/growth`, `/analytics/top-agencies`, `/analytics/churn` |
+| **Audit** | `GET /audit-logs` |
+| **System Health** | `GET /system-health` |
+| **Super Admin Users** | `POST /super-admins`, `GET /super-admins`, `DELETE /super-admins/{id}` |
+| **Impersonation** | `POST /impersonate/{agency_id}` |
+| **Templates** | `GET /templates`, `POST /templates`, `DELETE /templates/{id}` |
+| **Announcements** | `GET /announcements`, `POST /announcements`, `DELETE /announcements/{id}` |
+| **Billing Plans** | `GET /billing-plans`, `POST /billing-plans`, `PUT /billing-plans/{id}`, `DELETE /billing-plans/{id}` |
+| **Settings** | `GET /settings`, `GET /settings/{key}`, `PUT /settings/{key}`, `DELETE /settings/{key}` |
+| **Agency Backup** | `GET /backup/agencies`, `GET /backup/{id}/files/{subfolder}`, `POST /backup/{id}/trigger`, `POST /backup/{id}/trigger-monthly`, `POST /backup/{id}/trigger-yearly`, `POST /backup/trigger-all` |
+| **DB Backup** | `GET /backup/db/export-json`, `GET /backup/db/export-sql`, `GET /backup/db/stats`, `POST /backup/db/upload`, `POST /backup/db/upload-sql` |
+| **SA Google Drive** | `GET /backup/gdrive/status`, `GET /backup/gdrive/connect`, `GET /backup/gdrive/callback`, `POST /backup/gdrive/disconnect`, `POST /backup/gdrive/upload-db` |
 
 ### Restrictions:
 - ❌ Cannot directly modify agency operational data (newspapers, stock, customers)
 - Impersonation generates a scoped JWT — all actions audit-logged
+
+### Frontend Pages (8):
+Dashboard, Agencies, Analytics, Announcements, AuditLogs, SystemHealth, Settings, Backup
 
 ---
 
@@ -49,7 +49,7 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 **Role value:** `admin`
 **Tenant ID:** UUID of their agency
 
-### Endpoints (36):
+### Endpoints (47):
 | Category | Permissions | Endpoints |
 |----------|------------|-----------|
 | Dashboard | View stats, revenue chart, stock summary | 3 GET endpoints |
@@ -57,9 +57,12 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 | Workers | Full CRUD | POST, GET, PUT, DELETE |
 | Customers | Full CRUD | POST, GET, PUT, DELETE |
 | Daily Stock | Enter & view stock | POST, GET by date |
-| Subscriptions | Full CRUD | POST, GET, PUT, DELETE |
+| Subscriptions | Full CRUD (with subscription type) | POST, GET, PUT, DELETE |
 | Assignments | Create, view, delete routes | POST, GET, DELETE |
 | Billing | Generate invoices, view, mark paid | POST, GET, PUT |
+| Salaries | Full CRUD + mark paid | GET, POST, PUT, PUT/pay, DELETE |
+| Pricing Grid | View & bulk update prices | GET, PUT |
+| Reports | P&L, stock recon, worker perf, summary | 4 GET endpoints |
 | Announcements | View platform announcements | GET |
 | Google Drive | Connect, disconnect, trigger backups, browse files | 8 endpoints |
 
@@ -68,6 +71,9 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 - Cannot access data from other agencies
 - Cannot access super admin endpoints
 
+### Frontend Pages (12):
+Dashboard, Stock, Newspapers, Workers, Customers, Subscriptions, Assignments, Billing, Backup, Reports, Salaries, PricingGrid
+
 ---
 
 ## 3. 👷 Worker (Distributor)
@@ -75,22 +81,44 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 **Role value:** `worker`
 **Tenant ID:** UUID of their agency
 
-### Endpoints (3):
+### Endpoints (6):
 | Permission | Endpoint |
 |------------|----------|
 | View assigned customers & routes | `GET /worker/assignments` |
 | Sync offline updates (batch) | `POST /worker/offline-sync` |
 | View announcements | `GET /worker/announcements` |
+| View today's delivery route | `GET /worker/route` |
+| View personal sales metrics | `GET /worker/sales` |
+| View salary history | `GET /worker/salary` |
 
 ### Restrictions:
-- ❌ Cannot see pricing or billing data
-- ❌ Cannot see other workers' assignments
-- ❌ Cannot access admin or super admin endpoints
+- ❌ Cannot see other workers' assignments or sales
 - ❌ Cannot modify agency configuration
+- ❌ Cannot access admin or super admin endpoints
+- ✅ Can view their **own** salary data and sales metrics
 
 ### Offline Capabilities:
 - Can generate UUIDv4 IDs locally while offline
 - Updates queued in IndexedDB, synced when online via `useSyncQueue` hook
+- Service worker provides network-first caching with offline fallback page
+
+### Frontend Pages (4):
+Dashboard, MySales, MySalary, RouteView
+
+---
+
+## 🔐 Authentication Endpoints (5)
+
+| Permission | Endpoint |
+|------------|----------|
+| Login (all roles) | `POST /auth/login` |
+| Register agency + admin | `POST /auth/register` |
+| Refresh access token | `POST /auth/refresh` |
+| Request password reset | `POST /auth/forgot-password` |
+| Reset password with token | `POST /auth/reset-password` |
+
+### Frontend Pages (3):
+Login, ForgotPassword, ResetPassword
 
 ---
 
@@ -100,7 +128,8 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 1. Extracts JWT from `Authorization: Bearer <token>` header
 2. Decodes `tenant_id`, `role`, `user_id` into `request.state`
 3. Rejects non-super_admin users missing `tenant_id` with 403
-4. Bypasses auth for open routes: `/health`, `/auth/login`, `/auth/register`, `/docs`
+4. Bypasses auth for open routes: `/health`, `/auth/login`, `/auth/register`, `/docs`, `/openapi.json`, `/backup/google/callback`
+5. Records request latency metrics for APM monitoring
 
 ### require_role() (`app/api/dependencies.py`)
 - FastAPI dependency that checks `request.state.role` against allowed roles
@@ -112,6 +141,10 @@ Implemented Role-Based Access Control (RBAC) and tenant isolation rules for the 
 {
   "sub": "<user_id>",
   "tenant_id": "<agency_id or null>",
-  "role": "super_admin | admin | worker"
+  "role": "super_admin | admin | worker",
+  "exp": "<expiry timestamp>"
 }
 ```
+
+**Access Token:** 15 minute expiry
+**Refresh Token:** 30 day expiry — used to obtain new access tokens without re-login
