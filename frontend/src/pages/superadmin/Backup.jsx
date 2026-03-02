@@ -17,6 +17,7 @@ export default function SuperAdminBackup() {
     const [uploading, setUploading] = useState(false);
     const [uploadResult, setUploadResult] = useState(null);
     const fileInputRef = useRef(null);
+    const sqlInputRef = useRef(null);
     // SA GDrive state
     const [saGdrive, setSaGdrive] = useState({ connected: false, connected_at: null });
     const [saGdriveLoading, setSaGdriveLoading] = useState(null); // 'connect' | 'disconnect' | 'upload'
@@ -70,7 +71,7 @@ export default function SuperAdminBackup() {
         }
     };
 
-    const handleUpload = async (e) => {
+    const handleUpload = async (e, format = 'json') => {
         const file = e.target.files?.[0];
         if (!file) return;
         setUploading(true);
@@ -78,17 +79,18 @@ export default function SuperAdminBackup() {
         try {
             const formData = new FormData();
             formData.append('file', file);
-            const res = await api.post('/superadmin/backup/db/upload', formData, {
+            const url = format === 'sql' ? '/superadmin/backup/db/upload-sql' : '/superadmin/backup/db/upload';
+            const res = await api.post(url, formData, {
                 headers: { 'Content-Type': 'multipart/form-data' },
             });
-            setUploadResult({ success: true, ...res.data });
-            // Refresh stats
+            setUploadResult({ success: res.data.status === 'success', format, ...res.data });
             api.get('/superadmin/backup/db/stats').then(r => setDbStats(r.data)).catch(() => {});
         } catch (err) {
             setUploadResult({ success: false, error: err.response?.data?.detail || 'Upload failed' });
         } finally {
             setUploading(false);
             if (fileInputRef.current) fileInputRef.current.value = '';
+            if (sqlInputRef.current) sqlInputRef.current.value = '';
         }
     };
 
@@ -285,7 +287,7 @@ export default function SuperAdminBackup() {
 
                     <div className="border-l border-slate-700 mx-1" />
 
-                    <input type="file" accept=".json" ref={fileInputRef} onChange={handleUpload} className="hidden" />
+                    <input type="file" accept=".json" ref={fileInputRef} onChange={(e) => handleUpload(e, 'json')} className="hidden" />
                     <button
                         onClick={() => fileInputRef.current?.click()}
                         disabled={uploading}
@@ -294,7 +296,19 @@ export default function SuperAdminBackup() {
                         {uploading ? (
                             <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
                         ) : (
-                            <><Upload className="w-4 h-4" /> Upload JSON Backup</>
+                            <><Upload className="w-4 h-4" /> Upload JSON</>
+                        )}
+                    </button>
+                    <input type="file" accept=".sql" ref={sqlInputRef} onChange={(e) => handleUpload(e, 'sql')} className="hidden" />
+                    <button
+                        onClick={() => sqlInputRef.current?.click()}
+                        disabled={uploading}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-amber-600/20 text-amber-400 border border-amber-500/30 rounded-xl text-sm font-medium hover:bg-amber-600/30 transition-colors disabled:opacity-50 disabled:cursor-wait"
+                    >
+                        {uploading ? (
+                            <><Loader2 className="w-4 h-4 animate-spin" /> Uploading…</>
+                        ) : (
+                            <><Upload className="w-4 h-4" /> Upload SQL</>
                         )}
                     </button>
                 </div>
@@ -312,8 +326,18 @@ export default function SuperAdminBackup() {
                                 <>
                                     <p className="font-medium">Restore complete</p>
                                     <p className="text-sm opacity-80 mt-1">
-                                        {uploadResult.total_inserted} inserted, {uploadResult.total_updated} updated across {Object.keys(uploadResult.tables || {}).length} tables
+                                        {uploadResult.format === 'sql'
+                                            ? `${uploadResult.statements_run} SQL statements executed`
+                                            : `${uploadResult.total_inserted} inserted, ${uploadResult.total_updated} updated across ${Object.keys(uploadResult.tables || {}).length} tables`
+                                        }
                                     </p>
+                                </>
+                            ) : uploadResult.status === 'partial' ? (
+                                <>
+                                    <p className="font-medium">Partial restore — {uploadResult.statements_run} statements ran, {uploadResult.errors?.length} errors</p>
+                                    <ul className="text-xs opacity-80 mt-1 space-y-0.5">
+                                        {uploadResult.errors?.slice(0, 5).map((e, i) => <li key={i}>• {e}</li>)}
+                                    </ul>
                                 </>
                             ) : (
                                 <p className="font-medium">{uploadResult.error}</p>

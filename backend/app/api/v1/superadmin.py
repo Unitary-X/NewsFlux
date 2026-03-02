@@ -1137,6 +1137,65 @@ async def upload_database_json(file: UploadFile = File(...), db: Session = Depen
     }
 
 
+@router.post("/backup/db/upload-sql", dependencies=[Depends(require_role(["super_admin"]))])
+async def upload_database_sql(file: UploadFile = File(...), db: Session = Depends(get_db)):
+    """Upload a SQL backup file and execute it against the database."""
+    if not file.filename.endswith(".sql"):
+        raise HTTPException(status_code=400, detail="Only .sql backup files are accepted")
+
+    content = await file.read()
+    if len(content) > 100 * 1024 * 1024:
+        raise HTTPException(status_code=400, detail="File too large (max 100 MB)")
+
+    sql_text = content.decode("utf-8")
+    if not sql_text.strip():
+        raise HTTPException(status_code=400, detail="SQL file is empty")
+
+    from sqlalchemy import text as sa_text
+    statements_run = 0
+    errors = []
+
+    try:
+        # Split by semicolons, filter empty/comment-only lines
+        raw_statements = sql_text.split(";")
+        for stmt in raw_statements:
+            stmt = stmt.strip()
+            if not stmt or stmt.startswith("--"):
+                continue
+            # Skip pure comment blocks
+            lines = [l for l in stmt.split("\n") if l.strip() and not l.strip().startswith("--")]
+            if not lines:
+                continue
+            try:
+                db.execute(sa_text(stmt))
+                statements_run += 1
+            except Exception as e:
+                errors.append(f"Statement {statements_run + 1}: {str(e)[:200]}")
+                db.rollback()
+                if len(errors) >= 10:
+                    break
+
+        if not errors:
+            db.commit()
+        else:
+            db.rollback()
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=f"SQL restore failed: {str(e)[:500]}")
+
+    if errors:
+        return {
+            "status": "partial",
+            "statements_run": statements_run,
+            "errors": errors,
+        }
+
+    return {
+        "status": "success",
+        "statements_run": statements_run,
+    }
+
+
 # ═══════════════════════════════════════════════════════════════════
 # SUPER ADMIN GOOGLE DRIVE BACKUP
 # ═══════════════════════════════════════════════════════════════════
