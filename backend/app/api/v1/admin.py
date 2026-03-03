@@ -1,10 +1,12 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 from sqlalchemy import func, cast, Date, text
 from typing import List
 from datetime import date, datetime, timedelta
 from calendar import monthrange
 import uuid as uuid_mod
+import io
 
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
@@ -23,6 +25,12 @@ from app.schemas.admin import (
     PricingGridUpdate,
 )
 from app.core.security import get_password_hash
+from app.services.report_generator import (
+    profit_loss_pdf, profit_loss_excel,
+    stock_recon_pdf, stock_recon_excel,
+    worker_perf_pdf, worker_perf_excel,
+    summary_pdf, summary_excel,
+)
 from app.core.audit import log_audit
 
 router = APIRouter()
@@ -1044,6 +1052,91 @@ def report_summary(request: Request, period: str = "daily", target_date: str = N
         "deliveries": {"total": total_delivery_count, "delivered": delivered_count, "missed": missed_count},
         "daily_breakdown": sorted(daily_data.values(), key=lambda x: x["date"]),
     }
+
+
+# ──────────────────────────────────────────────
+# REPORT DOWNLOADS (PDF / EXCEL)
+# ──────────────────────────────────────────────
+
+@router.get("/reports/profit-loss/download", dependencies=[Depends(require_role(["admin"]))])
+def download_profit_loss(request: Request, month: int = None, year: int = None,
+                         fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download Profit & Loss report as PDF or Excel."""
+    data = profit_loss_report(request, month, year, db)
+    if fmt == "excel":
+        content = profit_loss_excel(data)
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=profit_loss_{data['month']}_{data['year']}.xlsx"},
+        )
+    content = profit_loss_pdf(data)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=profit_loss_{data['month']}_{data['year']}.pdf"},
+    )
+
+
+@router.get("/reports/stock-reconciliation/download", dependencies=[Depends(require_role(["admin"]))])
+def download_stock_recon(request: Request, target_date: str = None,
+                         fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download Stock Reconciliation report as PDF or Excel."""
+    data = stock_reconciliation(request, target_date, db)
+    if fmt == "excel":
+        content = stock_recon_excel(data)
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=stock_recon_{data['date']}.xlsx"},
+        )
+    content = stock_recon_pdf(data)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=stock_recon_{data['date']}.pdf"},
+    )
+
+
+@router.get("/reports/worker-performance/download", dependencies=[Depends(require_role(["admin"]))])
+def download_worker_perf(request: Request, month: int = None, year: int = None,
+                         fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download Worker Performance report as PDF or Excel."""
+    data = worker_performance(request, month, year, db)
+    if fmt == "excel":
+        content = worker_perf_excel(data)
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename=worker_perf_{data['month']}_{data['year']}.xlsx"},
+        )
+    content = worker_perf_pdf(data)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename=worker_perf_{data['month']}_{data['year']}.pdf"},
+    )
+
+
+@router.get("/reports/summary/download", dependencies=[Depends(require_role(["admin"]))])
+def download_summary(request: Request, period: str = "daily", target_date: str = None,
+                     fmt: str = "pdf", db: Session = Depends(get_db)):
+    """Download Summary report as PDF or Excel."""
+    data = report_summary(request, period, target_date, db)
+    fname = f"summary_{data['period']}_{data['start_date']}"
+    if fmt == "excel":
+        content = summary_excel(data)
+        return StreamingResponse(
+            io.BytesIO(content),
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={"Content-Disposition": f"attachment; filename={fname}.xlsx"},
+        )
+    content = summary_pdf(data)
+    return StreamingResponse(
+        io.BytesIO(content),
+        media_type="application/pdf",
+        headers={"Content-Disposition": f"attachment; filename={fname}.pdf"},
+    )
 
 
 # ──────────────────────────────────────────────

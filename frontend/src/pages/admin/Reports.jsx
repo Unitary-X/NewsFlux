@@ -1,10 +1,52 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
-import { Loader2, TrendingUp, TrendingDown, BarChart3, Users, Package, Calendar, Search, AlertTriangle, CheckCircle2, MinusCircle } from 'lucide-react';
+import { Loader2, TrendingUp, TrendingDown, BarChart3, Users, Package, Calendar, Search, AlertTriangle, CheckCircle2, MinusCircle, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from 'recharts';
 
 const TABS = ['profit_loss', 'stock_recon', 'worker_perf', 'summary'];
+
+/* ─── Download helper ─── */
+async function downloadReport(url, defaultName) {
+    const res = await api.get(url, { responseType: 'blob' });
+    const disposition = res.headers['content-disposition'] || '';
+    const match = disposition.match(/filename=(.+)/);
+    const filename = match ? match[1] : defaultName;
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(res.data);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(a.href);
+}
+
+/* ─── Reusable download buttons ─── */
+function DownloadButtons({ buildUrl, baseName, disabled, t }) {
+    const [downloading, setDownloading] = useState(null);
+    const handleDownload = async (fmt) => {
+        setDownloading(fmt);
+        try {
+            const ext = fmt === 'excel' ? 'xlsx' : 'pdf';
+            await downloadReport(`${buildUrl}&fmt=${fmt}`, `${baseName}.${ext}`);
+        } catch (err) { console.error('Download failed', err); }
+        finally { setDownloading(null); }
+    };
+    return (
+        <div className="flex gap-2">
+            <button onClick={() => handleDownload('pdf')} disabled={disabled || downloading === 'pdf'}
+                className="flex items-center gap-1.5 bg-red-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-red-700 disabled:opacity-50 transition-colors">
+                {downloading === 'pdf' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+                {t('reports.download_pdf', 'PDF')}
+            </button>
+            <button onClick={() => handleDownload('excel')} disabled={disabled || downloading === 'excel'}
+                className="flex items-center gap-1.5 bg-green-600 text-white px-3 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-colors">
+                {downloading === 'excel' ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileSpreadsheet className="w-4 h-4" />}
+                {t('reports.download_excel', 'Excel')}
+            </button>
+        </div>
+    );
+}
 
 export default function Reports() {
     const { t } = useTranslation();
@@ -102,14 +144,17 @@ export default function Reports() {
 function ProfitLossTab({ data, loading, month, year, setMonth, setYear, onFetch, t }) {
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-3 flex-wrap">
-                <select value={month} onChange={e => setMonth(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
-                </select>
-                <input type="number" value={year} onChange={e => setYear(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" />
-                <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.generate', 'Generate')}
-                </button>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <select value={month} onChange={e => setMonth(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
+                    </select>
+                    <input type="number" value={year} onChange={e => setYear(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" />
+                    <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.generate', 'Generate')}
+                    </button>
+                </div>
+                {data && <DownloadButtons buildUrl={`/admin/reports/profit-loss/download?month=${month}&year=${year}`} baseName={`profit_loss_${month}_${year}`} disabled={loading} t={t} />}
             </div>
 
             {loading && <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
@@ -163,11 +208,14 @@ function ProfitLossTab({ data, loading, month, year, setMonth, setYear, onFetch,
 function StockReconTab({ data, loading, targetDate, setTargetDate, onFetch, t }) {
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-3">
-                <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.check', 'Check')}
-                </button>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3">
+                    <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.check', 'Check')}
+                    </button>
+                </div>
+                {data && <DownloadButtons buildUrl={`/admin/reports/stock-reconciliation/download?target_date=${targetDate}`} baseName={`stock_recon_${targetDate}`} disabled={loading} t={t} />}
             </div>
 
             {loading && <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
@@ -238,14 +286,17 @@ function StockReconTab({ data, loading, targetDate, setTargetDate, onFetch, t })
 function WorkerPerfTab({ data, loading, month, year, setMonth, setYear, onFetch, t }) {
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-3 flex-wrap">
-                <select value={month} onChange={e => setMonth(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                    {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
-                </select>
-                <input type="number" value={year} onChange={e => setYear(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" />
-                <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.load', 'Load')}
-                </button>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <select value={month} onChange={e => setMonth(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
+                    </select>
+                    <input type="number" value={year} onChange={e => setYear(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" />
+                    <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.load', 'Load')}
+                    </button>
+                </div>
+                {data && <DownloadButtons buildUrl={`/admin/reports/worker-performance/download?month=${month}&year=${year}`} baseName={`worker_perf_${month}_${year}`} disabled={loading} t={t} />}
             </div>
 
             {loading && <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
@@ -320,16 +371,19 @@ function WorkerPerfTab({ data, loading, month, year, setMonth, setYear, onFetch,
 function SummaryTab({ data, loading, period, setPeriod, targetDate, setTargetDate, onFetch, t }) {
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-3 flex-wrap">
-                <select value={period} onChange={e => setPeriod(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                    <option value="daily">{t('reports.daily', 'Daily')}</option>
-                    <option value="weekly">{t('reports.weekly', 'Weekly')}</option>
-                    <option value="monthly">{t('reports.monthly', 'Monthly')}</option>
-                </select>
-                <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
-                <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                    {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.load', 'Load')}
-                </button>
+            <div className="flex items-center justify-between flex-wrap gap-3">
+                <div className="flex items-center gap-3 flex-wrap">
+                    <select value={period} onChange={e => setPeriod(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
+                        <option value="daily">{t('reports.daily', 'Daily')}</option>
+                        <option value="weekly">{t('reports.weekly', 'Weekly')}</option>
+                        <option value="monthly">{t('reports.monthly', 'Monthly')}</option>
+                    </select>
+                    <input type="date" value={targetDate} onChange={e => setTargetDate(e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
+                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.load', 'Load')}
+                    </button>
+                </div>
+                {data && <DownloadButtons buildUrl={`/admin/reports/summary/download?period=${period}&target_date=${targetDate}`} baseName={`summary_${period}_${targetDate}`} disabled={loading} t={t} />}
             </div>
 
             {loading && <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
