@@ -92,3 +92,4 @@ export function useSyncQueue() {
     }, [flushQueue]);
 
     return { isOnline, isSyncing, flushQueue, queueAction };
+}
