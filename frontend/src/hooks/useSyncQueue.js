@@ -50,6 +50,26 @@ export function useSyncQueue() {
         }
     }, [isSyncing]);
 
+    /**
+     * Queue an action to be synced when online
+     * @param {string} type - Action type (e.g., 'STOCK_UPDATE', 'DELIVERY_UPDATE')
+     * @param {object} payload - Action payload data
+     */
+    const queueAction = useCallback(async (type, payload) => {
+        try {
+            await db.syncQueue.add({
+                type,
+                payload,
+                status: 'pending',
+                timestamp: Date.now(),
+                retries: 0
+            });
+        } catch (err) {
+            console.error('Failed to queue action:', err);
+            throw err;
+        }
+    }, []);
+
     useEffect(() => {
         const handleOnline = () => {
             setIsOnline(true);
@@ -71,5 +91,4 @@ export function useSyncQueue() {
         };
     }, [flushQueue]);
 
-    return { isOnline, isSyncing, queueAction };
-}
+    return { isOnline, isSyncing, flushQueue, queueAction };

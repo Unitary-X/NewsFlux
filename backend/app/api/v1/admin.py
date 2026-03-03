@@ -60,8 +60,11 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
 
     # Today's revenue = sum(sold * base_price) for each newspaper
     today_revenue = 0.0
+    # Batch load all newspapers to avoid N+1 query
+    newspaper_ids = [s.newspaper_id for s in today_stocks]
+    newspapers = {p.id: p for p in db.query(Newspaper).filter(Newspaper.id.in_(newspaper_ids)).all()} if newspaper_ids else {}
     for s in today_stocks:
-        paper = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+        paper = newspapers.get(s.newspaper_id)
         if paper:
             sold = (s.taken or 0) - (s.returned or 0)
             today_revenue += sold * float(paper.base_price)
@@ -74,8 +77,11 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
         DailyStock.date <= today
     ).all()
     monthly_revenue = 0.0
+    # Batch load all newspapers for monthly calc
+    month_newspaper_ids = [s.newspaper_id for s in month_stocks]
+    month_newspapers = {p.id: p for p in db.query(Newspaper).filter(Newspaper.id.in_(month_newspaper_ids)).all()} if month_newspaper_ids else {}
     for s in month_stocks:
-        paper = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+        paper = month_newspapers.get(s.newspaper_id)
         if paper:
             sold = (s.taken or 0) - (s.returned or 0)
             monthly_revenue += sold * float(paper.base_price)
@@ -684,10 +690,10 @@ def list_salaries(request: Request, month: int = None, year: int = None, db: Ses
             "worker_id": str(s.worker_id),
             "month": s.month,
             "year": s.year,
-            "base_salary": float(s.base_salary),
-            "bonus": float(s.bonus),
-            "deductions": float(s.deductions),
-            "total_amount": float(s.total_amount),
+            "base_salary": float(s.base_salary or 0.0),
+            "bonus": float(s.bonus or 0.0),
+            "deductions": float(s.deductions or 0.0),
+            "total_amount": float(s.total_amount or 0.0),
             "status": s.status,
             "notes": s.notes,
             "created_at": s.created_at.isoformat() if s.created_at else None,

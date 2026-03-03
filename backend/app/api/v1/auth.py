@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 from typing import Optional
@@ -17,13 +17,18 @@ from app.core.security import (
 )
 from app.core.config import settings
 from app.core.celery_app import celery_app
+from app.core.rate_limiting import limiter
+from app.core.redis_client import (
+    store_password_reset_token, get_username_by_reset_token, 
+    invalidate_reset_token
+)
+from app.core.utils import validate_uuid_optional
 from pydantic import BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
-
-# In-memory password reset token store (username -> (token, expiry))
-# TODO: Move to Redis or database table when scaling
-password_reset_tokens = {}
 
 class RegisterWithTemplate(BaseModel):
     agency_name: str
@@ -32,81 +37,93 @@ class RegisterWithTemplate(BaseModel):
     template_id: Optional[str] = None
 
 @router.post("/register", response_model=Token)
-def register_agency(request: RegisterWithTemplate, db: Session = Depends(get_db)):
-    # Check if namespace exists
-    existing_user = db.query(User).filter(User.username == request.admin_username).first()
-    if existing_user:
-        raise HTTPException(status_code=400, detail="Username already registered")
+@limiter.limit("2/hour")
+def register_agency(request: Request, body: RegisterWithTemplate, db: Session = Depends(get_db)):
+    try:
+        # Check if username exists
+        existing_user = db.query(User).filter(User.username == body.admin_username).first()
+        if existing_user:
+            raise HTTPException(status_code=400, detail="Username already registered")
 
-    # 1. Provision the Agency Tenant Profile
-    new_agency = Agency(name=request.agency_name)
-    db.add(new_agency)
-    db.flush() # Commit locally to generate the new agency UUID
-    
-    # 2. Provision the Admin account specifically tied to the new agency_id
-    hashed_password = get_password_hash(request.admin_password)
-    new_admin = User(
-        username=request.admin_username,
-        password_hash=hashed_password,
-        role="admin",
-        tenant_id=new_agency.id
-    )
-    db.add(new_admin)
-
-    # 3. If template_id provided, seed newspapers from template
-    if request.template_id:
-        try:
-            import uuid as uuid_mod
-            template_uid = uuid_mod.UUID(request.template_id)
-            template = db.query(AgencyTemplate).filter(AgencyTemplate.id == template_uid).first()
-            if template and template.newspapers:
-                for np_data in template.newspapers:
-                    newspaper = Newspaper(
-                        tenant_id=new_agency.id,
-                        name=np_data.get("name", "Unknown"),
-                        base_price=np_data.get("base_price", 0.0),
-                    )
-                    db.add(newspaper)
-        except (ValueError, TypeError):
-            pass  # Invalid template_id, just skip seeding
-
-    db.commit()
-
-    # 4. Send welcome email (asynchronously)
-    if settings.EMAILS_ENABLED:
-        dashboard_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/admin/dashboard"
-        celery_app.send_task(
-            'email.send_agency_created',
-            args=[
-                request.agency_name,
-                request.admin_username,
-                settings.SMTP_FROM_EMAIL,  # Using default for now, could be extracted from request
-                dashboard_url
-            ]
+        # 1. Provision the Agency Tenant Profile
+        new_agency = Agency(name=body.agency_name)
+        db.add(new_agency)
+        db.flush() # Commit locally to generate the new agency UUID
+        
+        # 2. Provision the Admin account specifically tied to the new agency_id
+        hashed_password = get_password_hash(body.admin_password)
+        new_admin = User(
+            username=body.admin_username,
+            password_hash=hashed_password,
+            role="admin",
+            tenant_id=new_agency.id
         )
-    
-    # 5. Log them in automatically with access + refresh tokens
-    access_token = create_access_token(
-        subject=new_admin.id,
-        role=new_admin.role,
-        tenant_id=new_admin.tenant_id
-    )
-    refresh_token = create_refresh_token(
-        subject=new_admin.id,
-        role=new_admin.role,
-        tenant_id=new_admin.tenant_id
-    )
-    
-    return {
-        "access_token": access_token,
-        "token_type": "bearer",
-        "refresh_token": refresh_token
-    }
+        db.add(new_admin)
+
+        # 3. If template_id provided, seed newspapers from template
+        if body.template_id:
+            template_uid = validate_uuid_optional(body.template_id, "Template ID")
+            if template_uid:
+                template = db.query(AgencyTemplate).filter(AgencyTemplate.id == template_uid).first()
+                if template and template.newspapers:
+                    for np_data in template.newspapers:
+                        newspaper = Newspaper(
+                            tenant_id=new_agency.id,
+                            name=np_data.get("name", "Unknown"),
+                            base_price=np_data.get("base_price", 0.0),
+                        )
+                        db.add(newspaper)
+
+        db.commit()
+
+        # 4. Send welcome email (asynchronously)
+        if settings.EMAILS_ENABLED:
+            dashboard_url = f"{settings.FRONTEND_URL or 'http://localhost:5173'}/admin/dashboard"
+            celery_app.send_task(
+                'email.send_agency_created',
+                args=[
+                    body.agency_name,
+                    body.admin_username,
+                    settings.SMTP_FROM_EMAIL,  # Using default for now, could be extracted from request
+                    dashboard_url
+                ]
+            )
+        
+        # 5. Log them in automatically with access + refresh tokens
+        access_token = create_access_token(
+            subject=new_admin.id,
+            role=new_admin.role,
+            tenant_id=new_admin.tenant_id
+        )
+        refresh_token = create_refresh_token(
+            subject=new_admin.id,
+            role=new_admin.role,
+            tenant_id=new_admin.tenant_id
+        )
+        
+        return {
+            "access_token": access_token,
+            "token_type": "bearer",
+            "refresh_token": refresh_token
+        }
+    except HTTPException:
+        # Re-raise HTTP exceptions (like "Username already registered")
+        db.rollback()
+        raise
+    except Exception as e:
+        # Rollback all changes on any unexpected error
+        db.rollback()
+        logger.error(f"Error during agency registration: {str(e)}", exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Failed to create agency. Please try again."
+        )
 
 @router.post("/login", response_model=Token)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = db.query(User).filter(User.username == request.username).first()
-    if not user or not verify_password(request.password, user.password_hash):
+@limiter.limit("5/minute")
+def login(request: Request, body: LoginRequest, db: Session = Depends(get_db)):
+    user = db.query(User).filter(User.username == body.username).first()
+    if not user or not verify_password(body.password, user.password_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Incorrect username or password",
@@ -142,13 +159,14 @@ def login(request: LoginRequest, db: Session = Depends(get_db)):
 
 
 @router.post("/refresh", response_model=Token)
-def refresh_access_token(request: RefreshTokenRequest, db: Session = Depends(get_db)):
+@limiter.limit("10/minute")
+def refresh_access_token(request: Request, body: RefreshTokenRequest, db: Session = Depends(get_db)):
     """
     Exchange a valid refresh token for a new access token (and optionally new refresh token).
     This prevents session timeout by allowing clients to get fresh tokens.
     """
     try:
-        payload = decode_token(request.refresh_token)
+        payload = decode_token(body.refresh_token)
         
         # Verify it's a refresh token
         if payload.get("type") != "refresh":
@@ -203,12 +221,14 @@ def refresh_access_token(request: RefreshTokenRequest, db: Session = Depends(get
 
 
 @router.post("/forgot-password", response_model=ForgotPasswordResponse)
-def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("3/minute")
+def forgot_password(request: Request, body: ForgotPasswordRequest, db: Session = Depends(get_db)):
     """
-    Request password reset. Generates a reset token.
-    In production: send token via email. For now: return token in response.
+    Request password reset. Generates a reset token and stores it in Redis.
+    In production: send token via email. Token only returned in development mode.
+    Token expires after 1 hour.
     """
-    user = db.query(User).filter(User.username == request.username).first()
+    user = db.query(User).filter(User.username == body.username).first()
     
     # Always return success to prevent username enumeration
     if not user:
@@ -218,33 +238,27 @@ def forgot_password(request: ForgotPasswordRequest, db: Session = Depends(get_db
     
     # Generate secure reset token
     reset_token = secrets.token_urlsafe(32)
-    expiry = datetime.utcnow() + timedelta(hours=1)  # 1-hour expiry
     
-    # Store token (username -> (token, expiry))
-    password_reset_tokens[user.username] = (reset_token, expiry)
+    # Store token in Redis with 1-hour expiration
+    store_password_reset_token(user.username, reset_token, expiry_hours=1)
     
     # TODO: When email is implemented, send email with reset link
-    # For now, return token in response for development/testing
+    # Only return token in development mode for testing; in production, user must access via email
     return ForgotPasswordResponse(
         message="If this username exists, a password reset link has been sent.",
-        reset_token=reset_token  # Remove this in production
+        reset_token=reset_token if settings.ENVIRONMENT == "development" else None
     )
 
 
 @router.post("/reset-password")
-def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+@limiter.limit("5/hour")
+def reset_password(request: Request, body: ResetPasswordRequest, db: Session = Depends(get_db)):
     """
     Complete password reset using token + new password.
+    Token must be valid and not expired (tokens expire after 1 hour).
     """
-    # Find username by token
-    username = None
-    for uname, (token, expiry) in password_reset_tokens.items():
-        if token == request.token:
-            # Check expiry
-            if datetime.utcnow() > expiry:
-                break  # Token expired
-            username = uname
-            break
+    # Validate token and get username
+    username = get_username_by_reset_token(body.token)
     
     if not username:
         raise HTTPException(
@@ -260,10 +274,10 @@ def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db))
             detail="User not found"
         )
     
-    user.password_hash = get_password_hash(request.new_password)
+    user.password_hash = get_password_hash(body.new_password)
     db.commit()
     
-    # Invalidate token
-    del password_reset_tokens[username]
+    # Invalidate token after successful use
+    invalidate_reset_token(body.token)
     
     return {"message": "Password successfully reset. You can now log in with your new password."}

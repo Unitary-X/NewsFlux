@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Computed, Uuid, Boolean, Text, Float
+from sqlalchemy import Column, String, Integer, ForeignKey, DateTime, DECIMAL, JSON, Date, Uuid, Boolean, Text, Float
 from sqlalchemy.orm import relationship
 from datetime import datetime
 import uuid
@@ -58,7 +58,15 @@ class DailyStock(Base):
     newspaper_id = Column(Uuid, ForeignKey("newspapers.id"), nullable=False)
     taken = Column(Integer, default=0)
     returned = Column(Integer, default=0)
-    sold = Column(Integer, Computed('taken - returned'), nullable=True)
+    # Note: 'sold' is calculated as (taken - returned), not stored in DB
+    # Use the get_sold() property method or calculate in queries
+    
+    @property
+    def sold(self):
+        """Calculate sold quantity (taken - returned)"""
+        taken = self.taken or 0
+        returned = self.returned or 0
+        return taken - returned
 
 class WorkerAssignment(Base):
     __tablename__ = "worker_assignments"

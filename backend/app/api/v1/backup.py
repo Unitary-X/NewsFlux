@@ -140,7 +140,7 @@ def google_oauth_callback(
         if user_id:
             log_audit(db, user_id, 'GDRIVE_CONNECTED', 'agencies',
                       details={'agency_id': str(agency.id), 'folder_id': backup_folder_id},
-                      tenant_id=tid)
+                      tenant_id=agency.id)
 
         # Redirect user back to the frontend backup page
         frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"

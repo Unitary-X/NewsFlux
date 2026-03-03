@@ -1,4 +1,6 @@
 import logging
+import os
+import secrets
 from app.api.dependencies import SessionLocal
 from app.models.models import User, PlatformSettings
 from app.core.security import get_password_hash
@@ -13,9 +15,11 @@ def init_db() -> None:
         user = db.query(User).filter(User.username == "superadmin").first()
         if not user:
             logger.info("Initializing baseline Super Admin account...")
+            # Get password from environment variable or generate secure random one
+            initial_password = os.getenv("INITIAL_SUPERADMIN_PASSWORD", secrets.token_urlsafe(16))
             super_user = User(
                 username="superadmin",
-                password_hash=get_password_hash("admin123"), # Default bootstrap credentials
+                password_hash=get_password_hash(initial_password),
                 role="super_admin",
                 tenant_id=None
             )

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigate, Link } from 'react-router-dom';
 import axios from 'axios';
 import { useAuth } from '../contexts/AuthContext';
+import { API_ENDPOINTS } from '../config';
 import { Newspaper, Loader2, Globe } from 'lucide-react';
 
 export default function Login() {
@@ -25,7 +26,7 @@ export default function Login() {
         try {
             // Login using FastAPI standards (x-www-form-urlencoded vs JSON depending on backend setup)
             // We set up Pydantic model for LoginRequest JSON in backend, so we send JSON.
-            const response = await axios.post('http://localhost:8000/api/v1/auth/login', {
+            const response = await axios.post(API_ENDPOINTS.AUTH.LOGIN, {
                 username: data.username,
                 password: data.password
             });
@@ -46,7 +47,24 @@ export default function Login() {
 
         } catch (error) {
             console.error(error);
-            setServerError(error.response?.data?.detail || t('login.error'));
+            let errorMessage = t('login.error');
+            
+            // Provide specific error messages based on error type
+            if (error.response?.status === 403) {
+                // Agency suspended or user disabled
+                errorMessage = error.response?.data?.detail || t('login.account_suspended');
+            } else if (error.response?.status === 401 || error.response?.status === 422) {
+                // Invalid credentials
+                errorMessage = t('login.invalid_credentials');
+            } else if (error.response?.status === 404) {
+                // User not found
+                errorMessage = t('login.user_not_found');
+            } else if (error.response?.data?.detail) {
+                // Use server-provided detail if available
+                errorMessage = error.response.data.detail;
+            }
+            
+            setServerError(errorMessage);
         } finally {
             setIsLoading(false);
         }

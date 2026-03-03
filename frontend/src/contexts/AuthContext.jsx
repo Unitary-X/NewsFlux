@@ -1,9 +1,7 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import { API_BASE_URL, TOKEN_CONFIG } from '../config';
 
 const AuthContext = createContext(null);
-
-const API_BASE_URL = 'http://localhost:8000/api/v1';
-const TOKEN_REFRESH_INTERVAL = 10 * 60 * 1000; // Refresh every 10 minutes (access token expires in 15 min)
 
 export const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
@@ -79,7 +77,7 @@ export const AuthProvider = ({ children }) => {
             refreshTimerRef.current = setInterval(() => {
                 console.log('[AuthContext] Auto-refreshing token...');
                 refreshAccessToken();
-            }, TOKEN_REFRESH_INTERVAL);
+            }, TOKEN_CONFIG.TOKEN_REFRESH_INTERVAL);
 
             // Cleanup on unmount
             return () => {

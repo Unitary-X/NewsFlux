@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { AlertCircle, CheckCircle, ArrowLeft } from 'lucide-react';
+import { API_ENDPOINTS } from '../config';
 
 export default function ForgotPassword() {
   const [username, setUsername] = useState('');
@@ -16,7 +17,7 @@ export default function ForgotPassword() {
     setResetToken(null);
 
     try {
-      const response = await fetch('http://localhost:8000/api/v1/auth/forgot-password', {
+      const response = await fetch(API_ENDPOINTS.AUTH.FORGOT_PASSWORD, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username })

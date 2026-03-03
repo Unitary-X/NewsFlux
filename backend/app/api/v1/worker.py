@@ -1,10 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 from datetime import date
+import logging
 
 from app.api.dependencies import get_db, require_role
 from app.schemas.worker import OfflineSyncBatchRequest
 from app.models.models import DailyStock, CustomerSubscription, Newspaper, Customer, DailyDelivery, WorkerAssignment
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -29,15 +32,27 @@ def get_daily_assignments(request: Request, db: Session = Depends(get_db)):
 def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: Session = Depends(get_db)):
     """
     Receives an array of actions queued while the worker was in an offline zone
-    and resolves them sequentially.
+    and resolves them sequentially. Validates that all referenced entities exist.
     """
     tenant_id = request.state.tenant_id
     today = date.today()
+    failed_updates = []
 
     # 1. Resolve Stock Updates
     # Note: For MVP simplicity, we overwrite with the latest timestamp.
     # A true CRDT resolution would involve clock synchronization.
     for stock in payload.stock_updates:
+        # Verify newspaper exists and belongs to this tenant
+        newspaper = db.query(Newspaper).filter(
+            Newspaper.id == stock.newspaper_id,
+            Newspaper.tenant_id == tenant_id
+        ).first()
+        
+        if not newspaper:
+            logger.warning(f"Offline sync: Newspaper {stock.newspaper_id} not found for tenant {tenant_id}")
+            failed_updates.append({"type": "stock", "newspaper_id": str(stock.newspaper_id), "error": "Newspaper not found"})
+            continue
+        
         record = db.query(DailyStock).filter(
             DailyStock.tenant_id == tenant_id,
             DailyStock.newspaper_id == stock.newspaper_id,
@@ -64,6 +79,17 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
     # 2. Resolve Delivery Updates
     user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
     for delivery in payload.delivery_updates:
+        # Verify customer exists and belongs to this tenant
+        customer = db.query(Customer).filter(
+            Customer.id == delivery.customer_id,
+            Customer.tenant_id == tenant_id
+        ).first()
+        
+        if not customer:
+            logger.warning(f"Offline sync: Customer {delivery.customer_id} not found for tenant {tenant_id}")
+            failed_updates.append({"type": "delivery", "customer_id": str(delivery.customer_id), "error": "Customer not found"})
+            continue
+        
         sub = db.query(CustomerSubscription).filter(
             CustomerSubscription.tenant_id == tenant_id,
             CustomerSubscription.customer_id == delivery.customer_id
@@ -90,7 +116,15 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
             ))
 
     db.commit()
-    return {"message": "Offline sync resolved successfully", "processed_stock": len(payload.stock_updates), "processed_deliveries": len(payload.delivery_updates)}
+    
+    # Always return success even if some updates failed
+    # The frontend can retry failed items
+    return {
+        "message": "Offline sync processed",
+        "processed_stock": len([s for s in payload.stock_updates]),
+        "processed_deliveries": len([d for d in payload.delivery_updates]),
+        "failed_updates": failed_updates if failed_updates else None
+    }
 
 
 @router.get("/announcements", dependencies=[Depends(require_role(["worker"]))])
