@@ -3,15 +3,11 @@
  * All environment-based settings should be sourced from here
  */
 
-// API Configuration
-export const API_BASE_URL = process.env.REACT_APP_API_URL || 
-                            process.env.VITE_API_URL || 
-                            'http://localhost:8000/api/v1';
+// API Configuration — use relative path so Vite proxy handles it in dev
+export const API_BASE_URL = import.meta.env.VITE_API_URL || '/api/v1';
 
 // Frontend Configuration
-export const FRONTEND_URL = process.env.REACT_APP_FRONTEND_URL ||
-                            process.env.VITE_FRONTEND_URL ||
-                            'http://localhost:5173';
+export const FRONTEND_URL = import.meta.env.VITE_FRONTEND_URL || 'http://localhost:5173';
 
 // Feature Flags
 export const FEATURES = {

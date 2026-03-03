@@ -49,7 +49,7 @@ class ErrorBoundary extends React.Component {
               We're sorry for the inconvenience. The application encountered an unexpected error.
             </p>
 
-            {process.env.NODE_ENV === 'development' && this.state.error && (
+            {import.meta.env.DEV && this.state.error && (
               <div className="mb-6 p-4 bg-gray-100 rounded-lg border border-gray-300 overflow-auto max-h-64">
                 <p className="font-semibold text-sm text-gray-700 mb-2">Error Details:</p>
                 <pre className="text-xs text-red-600 whitespace-pre-wrap">
