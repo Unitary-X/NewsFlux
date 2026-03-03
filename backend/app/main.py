@@ -22,14 +22,14 @@ async def lifespan(app: FastAPI):
         logger.error(f"Configuration validation failed: {str(e)}")
         raise
     
-    # Check Redis connectivity
+    # Check Redis connectivity (non-fatal for local dev)
     try:
-        if not check_redis_connection():
-            raise ConnectionError("Unable to connect to Redis")
-        logger.info("Redis connection established")
+        if check_redis_connection():
+            logger.info("Redis connection established")
+        else:
+            logger.warning("Redis not available — password reset tokens will not work")
     except Exception as e:
-        logger.error(f"Redis connection failed: {str(e)}")
-        raise
+        logger.warning(f"Redis connection failed: {str(e)} — continuing without Redis")
     
     # Check database connectivity
     try:

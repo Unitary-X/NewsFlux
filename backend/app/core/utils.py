@@ -1,7 +1,7 @@
 """
 Utility functions for common validations and conversions.
 """
-from uuid import UUID, InvalidUUID
+from uuid import UUID
 from fastapi import HTTPException, status
 import logging
 
@@ -30,7 +30,7 @@ def validate_uuid(uuid_string: str, field_name: str = "ID") -> UUID:
     
     try:
         return UUID(uuid_string)
-    except (ValueError, InvalidUUID, TypeError) as e:
+    except (ValueError, TypeError) as e:
         logger.warning(f"Invalid {field_name.lower()}: {uuid_string}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -74,5 +74,5 @@ def is_valid_uuid(uuid_string: str | None) -> bool:
     try:
         UUID(uuid_string)
         return True
-    except (ValueError, InvalidUUID, TypeError):
+    except (ValueError, TypeError):
         return False
