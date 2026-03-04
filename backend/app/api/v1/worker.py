@@ -5,7 +5,7 @@ import logging
 
 from app.api.dependencies import get_db, require_role
 from app.schemas.worker import OfflineSyncBatchRequest
-from app.models.models import DailyStock, CustomerSubscription, Newspaper, Customer, DailyDelivery, WorkerAssignment
+from app.models.models import DailyStock, Newspaper, Customer, DailyDelivery, WorkerAssignment
 
 logger = logging.getLogger(__name__)
 
@@ -15,12 +15,31 @@ router = APIRouter()
 def get_daily_assignments(request: Request, db: Session = Depends(get_db)):
     """
     Fetches the base dataset for the Worker PWA to cache offline:
-    All active newspapers and all registered customers for the agency.
+    All active newspapers for the agency, and only customers assigned to this worker.
     """
     tenant_id = request.state.tenant_id
+    user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
     
     newspapers = db.query(Newspaper).filter(Newspaper.tenant_id == tenant_id).all()
-    customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
+    
+    # Only return customers assigned to this worker via WorkerAssignment
+    assigned_customer_ids = []
+    if user_id:
+        assignments = db.query(WorkerAssignment).filter(
+            WorkerAssignment.tenant_id == tenant_id,
+            WorkerAssignment.worker_id == user_id
+        ).order_by(WorkerAssignment.route_order).all()
+        assigned_customer_ids = [a.customer_id for a in assignments]
+    
+    customers = []
+    if assigned_customer_ids:
+        customers = db.query(Customer).filter(
+            Customer.id.in_(assigned_customer_ids),
+            Customer.tenant_id == tenant_id
+        ).all()
+        # Preserve route order from assignments
+        order_map = {cid: i for i, cid in enumerate(assigned_customer_ids)}
+        customers = sorted(customers, key=lambda c: order_map.get(c.id, 0))
     
     return {
         "newspapers": newspapers,
@@ -78,6 +97,16 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
 
     # 2. Resolve Delivery Updates
     user_id = request.state.user_id if hasattr(request.state, 'user_id') else None
+    
+    # Load this worker's assigned customer IDs for enforcement
+    assigned_ids = set()
+    if user_id:
+        assignments = db.query(WorkerAssignment.customer_id).filter(
+            WorkerAssignment.tenant_id == tenant_id,
+            WorkerAssignment.worker_id == user_id
+        ).all()
+        assigned_ids = {a.customer_id for a in assignments}
+    
     for delivery in payload.delivery_updates:
         # Verify customer exists and belongs to this tenant
         customer = db.query(Customer).filter(
@@ -90,15 +119,13 @@ def batch_offline_sync(request: Request, payload: OfflineSyncBatchRequest, db: S
             failed_updates.append({"type": "delivery", "customer_id": str(delivery.customer_id), "error": "Customer not found"})
             continue
         
-        sub = db.query(CustomerSubscription).filter(
-            CustomerSubscription.tenant_id == tenant_id,
-            CustomerSubscription.customer_id == delivery.customer_id
-        ).first()
-        
-        if sub:
-            sub.status = delivery.status
+        # Enforce worker↔customer assignment
+        if delivery.customer_id not in assigned_ids:
+            logger.warning(f"Offline sync: Worker {user_id} not assigned to customer {delivery.customer_id}")
+            failed_updates.append({"type": "delivery", "customer_id": str(delivery.customer_id), "error": "Customer not assigned to this worker"})
+            continue
 
-        # Also record in daily_deliveries for historical tracking / billing deductions
+        # Record in daily_deliveries (do NOT modify CustomerSubscription.status)
         existing_dd = db.query(DailyDelivery).filter(
             DailyDelivery.tenant_id == tenant_id,
             DailyDelivery.customer_id == delivery.customer_id,

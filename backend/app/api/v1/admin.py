@@ -17,7 +17,7 @@ from app.models.models import (
 from app.schemas.admin import (
     NewspaperCreate, NewspaperUpdate, NewspaperResponse,
     WorkerCreate, WorkerUpdate, WorkerResponse,
-    DailyStockEntry, CustomerCreate, CustomerUpdate, CustomerResponse,
+    CustomerCreate, CustomerUpdate, CustomerResponse,
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     AssignmentCreate, AssignmentResponse,
     InvoiceResponse, GenerateBillsRequest,
@@ -360,31 +360,8 @@ def delete_customer(request: Request, customer_id: str, db: Session = Depends(ge
 
 
 # ──────────────────────────────────────────────
-# DAILY STOCK
+# DAILY STOCK (read-only — workers enter stock via offline-sync)
 # ──────────────────────────────────────────────
-
-@router.post("/stock", dependencies=[Depends(require_role(["admin"]))])
-def add_daily_stock(request: Request, entry: DailyStockEntry, db: Session = Depends(get_db)):
-    tenant_id = request.state.tenant_id
-    existing = db.query(DailyStock).filter(
-        DailyStock.tenant_id == tenant_id,
-        DailyStock.newspaper_id == entry.newspaper_id,
-        DailyStock.date == entry.date
-    ).first()
-    if existing:
-        existing.taken = entry.taken
-        existing.returned = entry.returned
-    else:
-        new_stock = DailyStock(
-            tenant_id=tenant_id,
-            newspaper_id=entry.newspaper_id,
-            date=entry.date,
-            taken=entry.taken,
-            returned=entry.returned
-        )
-        db.add(new_stock)
-    db.commit()
-    return {"status": "success"}
 
 @router.get("/stock/{target_date}", dependencies=[Depends(require_role(["admin"]))])
 def get_daily_stock(request: Request, target_date: str, db: Session = Depends(get_db)):
