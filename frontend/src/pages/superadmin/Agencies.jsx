@@ -152,13 +152,16 @@ export default function Agencies() {
                         <tr className="bg-slate-900/60 text-[11px] tracking-widest text-slate-500 uppercase font-bold">
                             <th className="px-5 py-3">Agency</th>
                             <th className="px-5 py-3">Status</th>
+                            <th className="px-5 py-3 text-center">Workers</th>
+                            <th className="px-5 py-3 text-center">Customers</th>
+                            <th className="px-5 py-3 text-center">Subscriptions</th>
                             <th className="px-5 py-3">Plan</th>
                             <th className="px-5 py-3 text-right">Actions</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800/40">
                         {filtered.length === 0 ? (
-                            <tr><td colSpan="4" className="px-5 py-8 text-center text-slate-600 text-sm">No agencies found.</td></tr>
+                            <tr><td colSpan="7" className="px-5 py-8 text-center text-slate-600 text-sm">No agencies found.</td></tr>
                         ) : (
                             filtered.map(agency => (
                                 <tr key={agency.id} className="hover:bg-slate-800/20 transition-colors">
@@ -173,6 +176,21 @@ export default function Agencies() {
                                             }`}>
                                             <span className={`w-1.5 h-1.5 rounded-full ${agency.status === 'active' ? 'bg-emerald-400' : 'bg-red-400'}`} />
                                             {agency.status}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-3 text-center">
+                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-bold bg-blue-500/10 text-blue-400 border border-blue-500/20 min-w-[40px]">
+                                            {agency.worker_count || 0}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-3 text-center">
+                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-bold bg-purple-500/10 text-purple-400 border border-purple-500/20 min-w-[40px]">
+                                            {agency.customer_count || 0}
+                                        </span>
+                                    </td>
+                                    <td className="px-5 py-3 text-center">
+                                        <span className="inline-flex items-center justify-center px-2.5 py-1 rounded-lg text-xs font-bold bg-amber-500/10 text-amber-400 border border-amber-500/20 min-w-[40px]">
+                                            {agency.subscription_count || 0}
                                         </span>
                                     </td>
                                     <td className="px-5 py-3">

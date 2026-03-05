@@ -29,6 +29,9 @@ class AgencyResponse(BaseModel):
     name: str
     status: str
     billing_plan_id: Optional[UUID] = None
+    worker_count: int = 0
+    customer_count: int = 0
+    subscription_count: int = 0
     model_config = ConfigDict(from_attributes=True)
 
 class AgencyDetailResponse(BaseModel):
@@ -135,8 +138,23 @@ def _parse_uuid(value: str):
 
 @router.get("/agencies", response_model=List[AgencyResponse], dependencies=[Depends(require_role(["super_admin"]))])
 def list_all_agencies(request: Request, db: Session = Depends(get_db)):
-    """ Returns a global array of all registered SaaS tenants. """
-    return db.query(Agency).all()
+    """ Returns a global array of all registered SaaS tenants with counts. """
+    agencies = db.query(Agency).all()
+    result = []
+    for agency in agencies:
+        worker_count = db.query(func.count(User.id)).filter(User.tenant_id == agency.id, User.role == "worker").scalar() or 0
+        customer_count = db.query(func.count(Customer.id)).filter(Customer.tenant_id == agency.id).scalar() or 0
+        subscription_count = db.query(func.count(CustomerSubscription.id)).filter(CustomerSubscription.tenant_id == agency.id).scalar() or 0
+        result.append({
+            "id": agency.id,
+            "name": agency.name,
+            "status": agency.status,
+            "billing_plan_id": agency.billing_plan_id,
+            "worker_count": worker_count,
+            "customer_count": customer_count,
+            "subscription_count": subscription_count
+        })
+    return result
 
 @router.get("/agencies/{agency_id}", dependencies=[Depends(require_role(["super_admin"]))])
 def get_agency_detail(request: Request, agency_id: str, db: Session = Depends(get_db)):

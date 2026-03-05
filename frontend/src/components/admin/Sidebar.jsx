@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, BookOpen, Route, Receipt, HardDrive, BarChart3, Wallet, IndianRupee } from 'lucide-react';
+import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, BookOpen, Receipt, HardDrive, BarChart3, Wallet, IndianRupee, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -16,10 +16,7 @@ export default function Sidebar() {
         { to: "/admin", label: t('sidebar.overview'), icon: LayoutDashboard, end: true },
         { to: "/admin/stock", label: t('sidebar.daily_stock'), icon: FileSpreadsheet },
         { to: "/admin/newspapers", label: t('sidebar.newspapers'), icon: Newspaper },
-        { to: "/admin/workers", label: t('sidebar.workers'), icon: UserSquare2 },
-        { to: "/admin/customers", label: t('sidebar.customers'), icon: Users },
-        { to: "/admin/subscriptions", label: t('sidebar.subscriptions') || 'Subscriptions', icon: BookOpen },
-        { to: "/admin/assignments", label: t('sidebar.assignments') || 'Assignments', icon: Route },
+        { to: "/admin/agency", label: t('sidebar.agency') || 'Agency', icon: Building2 },
         { to: "/admin/billing", label: t('sidebar.billing') || 'Billing', icon: Receipt },
         { to: "/admin/salaries", label: t('sidebar.salaries') || 'Salaries', icon: Wallet },
         { to: "/admin/reports", label: t('sidebar.reports') || 'Reports', icon: BarChart3 },

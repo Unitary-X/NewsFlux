@@ -10,7 +10,7 @@ import Newspapers from './pages/admin/Newspapers';
 import Workers from './pages/admin/Workers';
 import Customers from './pages/admin/Customers';
 import Subscriptions from './pages/admin/Subscriptions';
-import Assignments from './pages/admin/Assignments';
+import Agency from './pages/admin/Agency';
 import Billing from './pages/admin/Billing';
 import Salaries from './pages/admin/Salaries';
 import Reports from './pages/admin/Reports';
@@ -76,7 +76,7 @@ function App() {
             <Route path="workers" element={<Workers />} />
             <Route path="customers" element={<Customers />} />
             <Route path="subscriptions" element={<Subscriptions />} />
-            <Route path="assignments" element={<Assignments />} />
+            <Route path="agency" element={<Agency />} />
             <Route path="billing" element={<Billing />} />
             <Route path="salaries" element={<Salaries />} />
             <Route path="reports" element={<Reports />} />
