@@ -156,7 +156,7 @@ export default function Billing() {
                                 <th className="px-6 py-4 font-semibold text-slate-600">{t('stock.date')}</th>
                                 <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('subscriptions.price')}</th>
                                 <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('billing.delivery_fee')}</th>
-                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">{t('billing.title')}</th>
+                                <th className="px-6 py-4 font-semibold text-slate-600 text-center">Status</th>
                                 <th className="px-6 py-4 font-semibold text-slate-600 text-right">{t('common.actions')}</th>
                             </tr>
                         </thead>

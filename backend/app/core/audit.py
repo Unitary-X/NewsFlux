@@ -115,11 +115,15 @@ def log_audit(
         - user_id should be the actual user performing the action, not an impersonation ID
     """
     try:
+        # Ensure UUIDs are proper types, not strings
+        if isinstance(user_id, str):
+            user_id = uuid_mod.UUID(user_id)
+        if isinstance(tenant_id, str):
+            tenant_id = uuid_mod.UUID(tenant_id)
         audit = AuditLog(
             user_id=user_id,
             action=action,
             target_table=resource,
-            resource_id=resource_id,
             changes=details or {},
             tenant_id=tenant_id
         )

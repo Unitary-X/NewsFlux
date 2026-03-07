@@ -136,13 +136,13 @@ export default function StockTable() {
                                 {newspapers.map(paper => {
                                     const currentStock = stock[paper.id] || { taken: 0, returned: 0 };
                                     const sold = Math.max(0, (currentStock.taken || 0) - (currentStock.returned || 0));
-                                    const income = sold * paper.base_price;
+                                    const income = sold * Number(paper.base_price);
 
                                     return (
                                         <tr key={paper.id} className="hover:bg-slate-50/50 transition-colors">
                                             <td className="px-6 py-4">
                                                 <span className="font-medium text-slate-800">{paper.name}</span>
-                                                <div className="text-xs text-slate-400 mt-1">Base Price: ₹{paper.base_price.toFixed(2)}</div>
+                                                <div className="text-xs text-slate-400 mt-1">Base Price: ₹{Number(paper.base_price).toFixed(2)}</div>
                                             </td>
                                             <td className="px-6 py-4">
                                                 <input

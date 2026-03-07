@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Users, UserSquare2, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, BookOpen, Receipt, HardDrive, BarChart3, Wallet, IndianRupee, Building2 } from 'lucide-react';
+import { LayoutDashboard, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, Receipt, HardDrive, BarChart3, Wallet, IndianRupee, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 

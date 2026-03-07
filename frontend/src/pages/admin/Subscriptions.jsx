@@ -194,7 +194,7 @@ export default function Subscriptions() {
                                     <td className="px-6 py-4 text-right text-slate-700">{sub.price ? `₹${Number(sub.price).toFixed(2)}` : 'Base'}</td>
                                     <td className="px-6 py-4 text-center">
                                         <button onClick={() => toggleStatus(sub)} className={`px-3 py-1 rounded-full text-xs font-semibold ${sub.status === 1 ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>
-                                            {sub.status === 1 ? t('billing.status_pending') : 'Paused'}
+                                            {sub.status === 1 ? 'Active' : 'Paused'}
                                         </button>
                                     </td>
                                     <td className="px-6 py-4 text-right">
