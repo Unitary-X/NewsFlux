@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserSquare2, BookOpen, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil } from 'lucide-react';
+import { Users, UserSquare2, BookOpen, Package, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil, Save, Calendar } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function Agency() {
@@ -22,7 +22,14 @@ export default function Agency() {
     const [editId, setEditId] = useState(null);
     const [editData, setEditData] = useState({});
 
+    // Stock state
+    const [stockDate, setStockDate] = useState(new Date().toISOString().split('T')[0]);
+    const [stock, setStock] = useState({});
+    const [stockLoading, setStockLoading] = useState(false);
+    const [stockSaving, setStockSaving] = useState(false);
+
     useEffect(() => { loadData(); }, []);
+    useEffect(() => { if (activeTab === 'stock') loadStock(); }, [stockDate, activeTab]);
 
     const loadData = async () => {
         setLoading(true);
@@ -90,6 +97,40 @@ export default function Agency() {
         } finally { setSubmitting(false); }
     };
 
+    // --- Stock handlers ---
+    const loadStock = async () => {
+        setStockLoading(true);
+        try {
+            const res = await api.get(`/admin/stock/${stockDate}`);
+            const stockMap = {};
+            res.data.forEach(s => { stockMap[s.newspaper_id] = { taken: s.taken, returned: s.returned }; });
+            setStock(stockMap);
+        } catch (err) { console.error('Failed to load stock', err); }
+        finally { setStockLoading(false); }
+    };
+
+    const handleStockInput = (paperId, field, value) => {
+        const val = parseInt(value) || 0;
+        setStock(prev => ({ ...prev, [paperId]: { ...prev[paperId], [field]: val } }));
+    };
+
+    const saveStock = async () => {
+        setStockSaving(true);
+        try {
+            await Promise.all(newspapers.map(paper => {
+                const entry = stock[paper.id] || { taken: 0, returned: 0 };
+                return api.post('/admin/stock', { date: stockDate, newspaper_id: paper.id, taken: entry.taken || 0, returned: entry.returned || 0 });
+            }));
+            alert('Stock saved successfully!');
+        } catch (err) { alert('Failed to save stock.'); }
+        finally { setStockSaving(false); }
+    };
+
+    const stockTotalIncome = newspapers.reduce((total, paper) => {
+        const s = stock[paper.id] || { taken: 0, returned: 0 };
+        return total + Math.max(0, (s.taken || 0) - (s.returned || 0)) * Number(paper.base_price);
+    }, 0);
+
     // --- Delete handlers ---
     const deleteWorker = async (id, name) => {
         if (!confirm(`Delete worker "${name}"?`)) return;
@@ -134,16 +175,26 @@ export default function Agency() {
     const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone || '').includes(search));
     const filteredSubs = subscriptions.filter(s => (s.customer_name || '').toLowerCase().includes(search.toLowerCase()) || (s.newspaper_name || '').toLowerCase().includes(search.toLowerCase()));
 
+    // Calculate active subscription stats
+    const activeSubs = subscriptions.filter(s => s.status === 1);
+    const totalEstMonthly = activeSubs.reduce((sum, sub) => {
+        const paper = newspapers.find(n => n.id === sub.newspaper_id);
+        const dailyPrice = sub.price ? Number(sub.price) : (paper ? Number(paper.base_price) : 0);
+        return sum + (dailyPrice * sub.quantity * 30);
+    }, 0);
+
     const tabs = [
-        { id: 'workers', label: 'Workers', icon: UserSquare2, count: workers.length, color: 'indigo' },
-        { id: 'customers', label: 'Customers', icon: Users, count: customers.length, color: 'emerald' },
-        { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: subscriptions.length, color: 'amber' },
+        { id: 'workers', label: 'Workers', icon: UserSquare2, count: workers.length, color: 'indigo', subtitle: null },
+        { id: 'customers', label: 'Customers', icon: Users, count: customers.length, color: 'emerald', subtitle: null },
+        { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: `${activeSubs.length}/${subscriptions.length}`, color: 'amber', subtitle: `Est. ₹${totalEstMonthly.toFixed(0)}/mo` },
+        { id: 'stock', label: 'Daily Stock', icon: Package, count: newspapers.length, color: 'blue', subtitle: stockTotalIncome > 0 ? `₹${stockTotalIncome.toFixed(0)} today` : null },
     ];
 
     const colorMap = {
         indigo: { bg: 'bg-indigo-50', text: 'text-indigo-600', activeBorder: 'border-indigo-500', tabBg: 'bg-indigo-600' },
         emerald: { bg: 'bg-emerald-50', text: 'text-emerald-600', activeBorder: 'border-emerald-500', tabBg: 'bg-emerald-600' },
         amber: { bg: 'bg-amber-50', text: 'text-amber-600', activeBorder: 'border-amber-500', tabBg: 'bg-amber-600' },
+        blue: { bg: 'bg-blue-50', text: 'text-blue-600', activeBorder: 'border-blue-500', tabBg: 'bg-blue-600' },
     };
 
     if (loading) {
@@ -167,7 +218,7 @@ export default function Agency() {
             </div>
 
             {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
                 {tabs.map((tab) => {
                     const c = colorMap[tab.color];
                     const isActive = activeTab === tab.id;
@@ -187,6 +238,7 @@ export default function Agency() {
                             </div>
                             <h3 className="text-2xl font-bold text-slate-800">{tab.count}</h3>
                             <p className="text-sm text-slate-500 mt-1">{tab.label}</p>
+                            {tab.subtitle && <p className="text-xs text-slate-400 mt-0.5">{tab.subtitle}</p>}
                         </button>
                     );
                 })}
@@ -220,26 +272,50 @@ export default function Agency() {
                         })}
                     </div>
                     <div className="flex items-center gap-2 pr-2">
-                        <div className="relative">
-                            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                            <input
-                                value={search}
-                                onChange={e => setSearch(e.target.value)}
-                                placeholder="Search..."
-                                className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-44"
-                            />
-                        </div>
-                        <button
-                            onClick={() => { setShowForm(!showForm); setEditId(null); }}
-                            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                showForm
-                                    ? 'bg-slate-200 text-slate-700'
-                                    : `${currentColor.tabBg} text-white hover:opacity-90`
-                            }`}
-                        >
-                            {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                            {showForm ? 'Cancel' : 'Add'}
-                        </button>
+                        {activeTab === 'stock' ? (
+                            <>
+                                <div className="relative">
+                                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input
+                                        type="date"
+                                        value={stockDate}
+                                        onChange={e => setStockDate(e.target.value)}
+                                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
+                                    />
+                                </div>
+                                <button
+                                    onClick={saveStock}
+                                    disabled={stockSaving || stockLoading}
+                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60"
+                                >
+                                    {stockSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
+                                    Save
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <div className="relative">
+                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
+                                    <input
+                                        value={search}
+                                        onChange={e => setSearch(e.target.value)}
+                                        placeholder="Search..."
+                                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-44"
+                                    />
+                                </div>
+                                <button
+                                    onClick={() => { setShowForm(!showForm); setEditId(null); }}
+                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                                        showForm
+                                            ? 'bg-slate-200 text-slate-700'
+                                            : `${currentColor.tabBg} text-white hover:opacity-90`
+                                    }`}
+                                >
+                                    {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                                    {showForm ? 'Cancel' : 'Add'}
+                                </button>
+                            </>
+                        )}
                     </div>
                 </div>
 
@@ -448,52 +524,163 @@ export default function Agency() {
                                 <p className="text-slate-400 text-sm mt-1">Click "Add" to create a subscription</p>
                             </div>
                         ) : (
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Customer</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-center">Type</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-center">Qty</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Price</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-center">Status</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filteredSubs.map((sub) => (
-                                        <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-3.5 flex items-center gap-3">
-                                                <div className="p-2 bg-amber-100 rounded-lg">
-                                                    <BookOpen className="w-4 h-4 text-amber-600" />
-                                                </div>
-                                                <span className="font-medium text-slate-800">{sub.customer_name || '-'}</span>
+                            <>
+                                {/* Billing info banner */}
+                                <div className="mx-6 mt-4 mb-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-start gap-2">
+                                    <span className="mt-0.5 shrink-0">ℹ️</span>
+                                    <div>
+                                        <span className="font-semibold">Billing model: </span>
+                                        Monthly = (price × qty × days) + service charge &nbsp;|&nbsp; Yearly = (price × qty × days), no service charge
+                                    </div>
+                                </div>
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-sm">
+                                            <th className="px-6 py-3 font-semibold text-slate-600">Customer</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Type</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Qty</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Price/day</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Est. Monthly</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Status</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {filteredSubs.map((sub) => {
+                                            const paper = newspapers.find(n => n.id === sub.newspaper_id);
+                                            const dailyPrice = sub.price ? Number(sub.price) : (paper ? Number(paper.base_price) : 0);
+                                            const estMonthly = dailyPrice * sub.quantity * 30;
+                                            const isYearly = sub.subscription_type === 'yearly';
+                                            return (
+                                                <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-3.5 flex items-center gap-3">
+                                                        <div className="p-2 bg-amber-100 rounded-lg">
+                                                            <BookOpen className="w-4 h-4 text-amber-600" />
+                                                        </div>
+                                                        <span className="font-medium text-slate-800">{sub.customer_name || '-'}</span>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-slate-600">{sub.newspaper_name || '-'}</td>
+                                                    <td className="px-6 py-3.5 text-center">
+                                                        <div className="flex flex-col items-center gap-1">
+                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
+                                                                sub.subscription_type === 'daily' ? 'bg-blue-100 text-blue-700' :
+                                                                sub.subscription_type === 'weekly' ? 'bg-purple-100 text-purple-700' :
+                                                                sub.subscription_type === 'monthly' ? 'bg-amber-100 text-amber-700' :
+                                                                'bg-green-100 text-green-700'
+                                                            }`}>{sub.subscription_type || 'daily'}</span>
+                                                            {isYearly && <span className="text-[10px] text-green-600 font-medium">No service charge</span>}
+                                                            {sub.subscription_type === 'monthly' && <span className="text-[10px] text-amber-600 font-medium">+ service charge</span>}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-center text-slate-700 font-medium">{sub.quantity}</td>
+                                                    <td className="px-6 py-3.5 text-right text-slate-700">₹{dailyPrice.toFixed(2)}</td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <span className="font-semibold text-slate-800">₹{estMonthly.toFixed(0)}</span>
+                                                        <span className="text-[10px] text-slate-400 block">/month est.</span>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-center">
+                                                        <button onClick={() => toggleSubStatus(sub)} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
+                                                            sub.status === 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
+                                                        }`}>
+                                                            {sub.status === 1 ? 'Active' : 'Paused'}
+                                                        </button>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <button onClick={() => deleteSub(sub.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </>
+                        )
+                    )}
+
+                    {activeTab === 'stock' && (
+                        stockLoading ? (
+                            <div className="flex items-center justify-center py-24">
+                                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
+                            </div>
+                        ) : newspapers.length === 0 ? (
+                            <div className="p-12 text-center">
+                                <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
+                                <p className="text-slate-500 font-medium">No newspapers configured</p>
+                                <p className="text-slate-400 text-sm mt-1">Add newspapers first to manage stock</p>
+                            </div>
+                        ) : (
+                            <>
+                                <table className="w-full text-left">
+                                    <thead>
+                                        <tr className="bg-slate-50 border-b border-slate-200 text-sm">
+                                            <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 w-44">Taken</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 w-44">Returned</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 w-28 text-right">Sold</th>
+                                            <th className="px-6 py-3 font-semibold text-slate-600 w-36 text-right">Income</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100">
+                                        {newspapers.map(paper => {
+                                            const s = stock[paper.id] || { taken: 0, returned: 0 };
+                                            const sold = Math.max(0, (s.taken || 0) - (s.returned || 0));
+                                            const income = sold * Number(paper.base_price);
+                                            return (
+                                                <tr key={paper.id} className="hover:bg-slate-50 transition-colors">
+                                                    <td className="px-6 py-3.5">
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 bg-blue-100 rounded-lg">
+                                                                <Package className="w-4 h-4 text-blue-600" />
+                                                            </div>
+                                                            <div>
+                                                                <span className="font-medium text-slate-800">{paper.name}</span>
+                                                                <div className="text-xs text-slate-400">₹{Number(paper.base_price).toFixed(2)}/copy</div>
+                                                            </div>
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={s.taken || ''}
+                                                            onChange={e => handleStockInput(paper.id, 'taken', e.target.value)}
+                                                            placeholder="0"
+                                                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-3.5">
+                                                        <input
+                                                            type="number"
+                                                            min="0"
+                                                            value={s.returned || ''}
+                                                            onChange={e => handleStockInput(paper.id, 'returned', e.target.value)}
+                                                            placeholder="0"
+                                                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <span className={`font-bold text-lg ${sold > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{sold}</span>
+                                                    </td>
+                                                    <td className="px-6 py-3.5 text-right">
+                                                        <span className={`font-semibold text-lg ${income > 0 ? 'text-blue-600' : 'text-slate-400'}`}>₹{income.toFixed(2)}</span>
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr className="bg-gradient-to-r from-blue-50 to-emerald-50 border-t-2 border-blue-200">
+                                            <td colSpan="4" className="px-6 py-4 text-right">
+                                                <span className="text-lg font-bold text-slate-700">Total Income:</span>
                                             </td>
-                                            <td className="px-6 py-3.5 text-slate-600">{sub.newspaper_name || '-'}</td>
-                                            <td className="px-6 py-3.5 text-center">
-                                                <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                    sub.subscription_type === 'daily' ? 'bg-blue-100 text-blue-700' :
-                                                    sub.subscription_type === 'weekly' ? 'bg-purple-100 text-purple-700' :
-                                                    sub.subscription_type === 'monthly' ? 'bg-amber-100 text-amber-700' :
-                                                    'bg-green-100 text-green-700'
-                                                }`}>{sub.subscription_type || 'daily'}</span>
-                                            </td>
-                                            <td className="px-6 py-3.5 text-center text-slate-700 font-medium">{sub.quantity}</td>
-                                            <td className="px-6 py-3.5 text-right text-slate-700">{sub.price ? `₹${Number(sub.price).toFixed(2)}` : 'Base'}</td>
-                                            <td className="px-6 py-3.5 text-center">
-                                                <button onClick={() => toggleSubStatus(sub)} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
-                                                    sub.status === 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                                                }`}>
-                                                    {sub.status === 1 ? 'Active' : 'Paused'}
-                                                </button>
-                                            </td>
-                                            <td className="px-6 py-3.5 text-right">
-                                                <button onClick={() => deleteSub(sub.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
+                                            <td className="px-6 py-4 text-right">
+                                                <span className="text-2xl font-bold text-emerald-600">₹{stockTotalIncome.toFixed(2)}</span>
                                             </td>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </table>
+                                    </tfoot>
+                                </table>
+                            </>
                         )
                     )}
                 </div>

@@ -602,6 +602,7 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             continue
 
         total = 0.0
+        has_non_yearly_sub = False
         for sub in subs:
             paper = db.query(Newspaper).filter(Newspaper.id == sub.newspaper_id).first()
             if paper:
@@ -617,8 +618,12 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
                 ).scalar() or 0
                 billable_days = days_in_month - missed_days
                 total += price * sub.quantity * billable_days
+                if sub.subscription_type != "yearly":
+                    has_non_yearly_sub = True
 
-        total += delivery_fee
+        # Service charge (delivery_fee) only applies for non-yearly subscriptions
+        applied_fee = delivery_fee if has_non_yearly_sub else 0.0
+        total += applied_fee
 
         invoice = Invoice(
             tenant_id=tid,
@@ -626,7 +631,7 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             month=month,
             year=year,
             total_amount=round(total, 2),
-            delivery_fee=delivery_fee,
+            delivery_fee=applied_fee,
             status="pending"
         )
         db.add(invoice)
