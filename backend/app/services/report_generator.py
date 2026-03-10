@@ -158,7 +158,6 @@ def profit_loss_pdf(data: dict) -> bytes:
         ["  Collected", _fmt(data["revenue"]["collected"])],
         ["  Pending", _fmt(data["revenue"]["pending"])],
         ["Newspaper Purchase Cost", _fmt(data["expenses"]["purchase_cost"])],
-        ["Worker Salaries", _fmt(data["expenses"]["salary"])],
         ["Total Expenses", _fmt(data["expenses"]["total"])],
         ["Net Profit", _fmt(data["net_profit"])],
     ]
@@ -173,7 +172,7 @@ def profit_loss_pdf(data: dict) -> bytes:
     ]
     elems.append(_make_table(stock[0], stock[1:]))
     elems.append(Spacer(1, 6))
-    elems.append(Paragraph(f"Invoices: {data['invoices_count']}  |  Salary Records: {data['salaries_count']}", _sub_style))
+    elems.append(Paragraph(f"Invoices: {data['invoices_count']}", _sub_style))
 
     doc.build(elems, canvasmaker=WatermarkCanvas)
     return buf.getvalue()
@@ -194,7 +193,6 @@ def profit_loss_excel(data: dict) -> bytes:
         ("  Collected", data["revenue"]["collected"]),
         ("  Pending", data["revenue"]["pending"]),
         ("Newspaper Purchase Cost", data["expenses"]["purchase_cost"]),
-        ("Worker Salaries", data["expenses"]["salary"]),
         ("Total Expenses", data["expenses"]["total"]),
         ("Net Profit", data["net_profit"]),
     ]
@@ -257,54 +255,6 @@ def stock_recon_excel(data: dict) -> bytes:
     _xl_write_header(ws, headers, row=4)
     rows = [(n["newspaper_name"], n["expected"], n["taken"], n["returned"],
              n["sold"], n["discrepancy"], n["status"].title()) for n in data["newspapers"]]
-    _xl_write_rows(ws, rows, start_row=5)
-    _xl_auto_width(ws)
-
-    buf = io.BytesIO()
-    wb.save(buf)
-    return buf.getvalue()
-
-
-# ────────────────────────────────────
-# WORKER PERFORMANCE
-# ────────────────────────────────────
-
-def worker_perf_pdf(data: dict) -> bytes:
-    buf = io.BytesIO()
-    doc = _pdf_doc(buf, "Worker Performance")
-    elems = []
-    elems.append(Paragraph("Worker Performance Report", _title_style))
-    elems.append(Paragraph(f"{_month_name(data['month'])} {data['year']}", _sub_style))
-    elems.append(Spacer(1, 10))
-
-    headers = ["#", "Worker", "Assignments", "Delivered", "Missed", "Rate %", "Salary (₹)", "Status"]
-    rows = []
-    for i, w in enumerate(data["workers"], 1):
-        rows.append([
-            i, w["worker_name"], w["assignments"], w["delivered"],
-            w["missed"], f"{w['delivery_rate']}%",
-            f"{w['salary_amount']:,.2f}", w["salary_status"],
-        ])
-    elems.append(_make_table(headers, rows))
-
-    doc.build(elems, canvasmaker=WatermarkCanvas)
-    return buf.getvalue()
-
-
-def worker_perf_excel(data: dict) -> bytes:
-    wb = Workbook()
-    ws = wb.active
-    ws.title = "Worker Performance"
-
-    ws.cell(row=1, column=1, value="Worker Performance Report").font = Font(bold=True, size=14)
-    ws.cell(row=2, column=1, value=f"{_month_name(data['month'])} {data['year']}")
-
-    headers = ["#", "Worker", "Assignments", "Delivered", "Missed", "Rate %", "Salary", "Status"]
-    _xl_write_header(ws, headers, row=4)
-    rows = []
-    for i, w in enumerate(data["workers"], 1):
-        rows.append((i, w["worker_name"], w["assignments"], w["delivered"],
-                      w["missed"], w["delivery_rate"], w["salary_amount"], w["salary_status"]))
     _xl_write_rows(ws, rows, start_row=5)
     _xl_auto_width(ws)
 

@@ -54,7 +54,6 @@ export default function SuperAdminDashboard() {
         { label: "Total Agencies", value: analytics?.total_agencies ?? 0, icon: Building2, color: "indigo", trend: calcTrend("agencies"), sparkKey: "agencies" },
         { label: "Total Customers", value: analytics?.total_customers ?? 0, icon: Users, color: "cyan", trend: calcTrend("customers"), sparkKey: "customers" },
         { label: "Total Newspapers", value: analytics?.total_newspapers ?? 0, icon: Newspaper, color: "emerald", trend: calcTrend("newspapers"), sparkKey: "newspapers" },
-        { label: "Total Workers", value: analytics?.total_workers ?? 0, icon: Activity, color: "amber", trend: calcTrend("workers"), sparkKey: "workers" },
     ];
 
     const pieData = [
@@ -180,7 +179,7 @@ export default function SuperAdminDashboard() {
                                         <div className="flex justify-between items-center mb-1.5">
                                             <span className="text-sm font-semibold text-white truncate">{agency.name}</span>
                                             <span className="text-xs text-slate-500 ml-2 shrink-0">
-                                                {agency.customer_count} customers &middot; {agency.worker_count} workers &middot; {agency.newspaper_count} papers
+                                                {agency.customer_count} customers &middot; {agency.newspaper_count} papers
                                             </span>
                                         </div>
                                         <div className="w-full bg-slate-800 rounded-full h-2">

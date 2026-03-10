@@ -3,7 +3,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Newspaper, Users, UserSquare2, IndianRupee, TrendingUp, Package, FileText, Loader2 } from 'lucide-react';
+import { Newspaper, Users, IndianRupee, TrendingUp, Package, FileText, Loader2 } from 'lucide-react';
 
 function KPICard({ title, value, icon: Icon, color, sub }) {
     const colors = {
@@ -77,9 +77,8 @@ export default function AdminDashboard() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                 <KPICard title={t('admin.newspapers_kpi')} value={s.total_newspapers} icon={Newspaper} color="blue" />
-                <KPICard title={t('admin.workers_kpi')} value={s.total_workers} icon={UserSquare2} color="indigo" />
                 <KPICard title={t('admin.customers_kpi')} value={s.total_customers} icon={Users} color="emerald" />
                 <KPICard title={t('admin.revenue_kpi')} value={`₹${s.today_revenue?.toLocaleString() || 0}`} icon={IndianRupee} color="amber" sub={`${t('stock.sold')}: ${s.today_sold || 0}`} />
                 <KPICard title={t('admin.monthly_revenue')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`${t('billing.pending_amount')}: ${s.pending_invoices || 0}`} />

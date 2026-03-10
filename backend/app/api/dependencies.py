@@ -32,6 +32,8 @@ def get_db() -> Generator:
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Database service is currently unavailable. Please try again later."
         )
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Unexpected database error: {str(e)}")
         raise HTTPException(

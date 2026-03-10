@@ -11,24 +11,20 @@ import io
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
     Newspaper, User, Customer, DailyStock, 
-    CustomerSubscription, WorkerAssignment, Invoice, Agency,
-    Salary, DailyDelivery
+    CustomerSubscription, Invoice, Agency,
+    DailyDelivery
 )
 from app.schemas.admin import (
     NewspaperCreate, NewspaperUpdate, NewspaperResponse,
-    WorkerCreate, WorkerUpdate, WorkerResponse,
     DailyStockEntry, CustomerCreate, CustomerUpdate, CustomerResponse,
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
-    AssignmentCreate, AssignmentResponse,
     InvoiceResponse, GenerateBillsRequest,
-    SalaryCreate, SalaryUpdate, SalaryResponse,
     PricingGridUpdate,
 )
-from app.core.security import get_password_hash
+
 from app.services.report_generator import (
     profit_loss_pdf, profit_loss_excel,
     stock_recon_pdf, stock_recon_excel,
-    worker_perf_pdf, worker_perf_excel,
     summary_pdf, summary_excel,
 )
 from app.core.audit import log_audit
@@ -52,7 +48,6 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
     today = date.today()
 
     total_newspapers = db.query(func.count(Newspaper.id)).filter(Newspaper.tenant_id == tid).scalar() or 0
-    total_workers = db.query(func.count(User.id)).filter(User.tenant_id == tid, User.role == "worker").scalar() or 0
     total_customers = db.query(func.count(Customer.id)).filter(Customer.tenant_id == tid).scalar() or 0
     active_subscriptions = db.query(func.count(CustomerSubscription.id)).filter(
         CustomerSubscription.tenant_id == tid, CustomerSubscription.status == 1
@@ -101,7 +96,6 @@ def dashboard_stats(request: Request, db: Session = Depends(get_db)):
 
     return {
         "total_newspapers": total_newspapers,
-        "total_workers": total_workers,
         "total_customers": total_customers,
         "active_subscriptions": active_subscriptions,
         "today_taken": today_taken,
@@ -246,64 +240,6 @@ def delete_newspaper(request: Request, newspaper_id: str, db: Session = Depends(
 
 
 # ──────────────────────────────────────────────
-# WORKERS CRUD
-# ──────────────────────────────────────────────
-
-@router.post("/workers", response_model=WorkerResponse, dependencies=[Depends(require_role(["admin"]))])
-def create_worker(request: Request, worker: WorkerCreate, db: Session = Depends(get_db)):
-    tenant_id = request.state.tenant_id
-    existing = db.query(User).filter(User.username == worker.username).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Worker username already taken")
-    new_worker = User(
-        username=worker.username,
-        password_hash=get_password_hash(worker.password),
-        role="worker",
-        tenant_id=tenant_id
-    )
-    db.add(new_worker)
-    db.commit()
-    db.refresh(new_worker)
-    return new_worker
-
-@router.get("/workers", response_model=List[WorkerResponse], dependencies=[Depends(require_role(["admin"]))])
-def list_workers(request: Request, db: Session = Depends(get_db)):
-    workers = db.query(User).filter(User.tenant_id == request.state.tenant_id, User.role == "worker").all()
-    return workers
-
-@router.put("/workers/{worker_id}", response_model=WorkerResponse, dependencies=[Depends(require_role(["admin"]))])
-def update_worker(request: Request, worker_id: str, data: WorkerUpdate, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    worker = db.query(User).filter(
-        User.id == _parse_uuid(worker_id), User.tenant_id == tid, User.role == "worker"
-    ).first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    if data.username is not None:
-        existing = db.query(User).filter(User.username == data.username, User.id != worker.id).first()
-        if existing:
-            raise HTTPException(status_code=400, detail="Username already taken")
-        worker.username = data.username
-    if data.password is not None:
-        worker.password_hash = get_password_hash(data.password)
-    db.commit()
-    db.refresh(worker)
-    return worker
-
-@router.delete("/workers/{worker_id}", dependencies=[Depends(require_role(["admin"]))])
-def delete_worker(request: Request, worker_id: str, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    uid = _parse_uuid(worker_id)
-    worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    db.query(WorkerAssignment).filter(WorkerAssignment.worker_id == uid, WorkerAssignment.tenant_id == tid).delete()
-    db.delete(worker)
-    db.commit()
-    return {"status": "deleted"}
-
-
-# ──────────────────────────────────────────────
 # CUSTOMERS CRUD
 # ──────────────────────────────────────────────
 
@@ -352,7 +288,6 @@ def delete_customer(request: Request, customer_id: str, db: Session = Depends(ge
     if not cust:
         raise HTTPException(status_code=404, detail="Customer not found")
     db.query(CustomerSubscription).filter(CustomerSubscription.customer_id == uid, CustomerSubscription.tenant_id == tid).delete()
-    db.query(WorkerAssignment).filter(WorkerAssignment.customer_id == uid, WorkerAssignment.tenant_id == tid).delete()
     db.query(Invoice).filter(Invoice.customer_id == uid, Invoice.tenant_id == tid).delete()
     db.delete(cust)
     db.commit()
@@ -496,76 +431,6 @@ def delete_subscription(request: Request, sub_id: str, db: Session = Depends(get
 
 
 # ──────────────────────────────────────────────
-# WORKER ASSIGNMENTS
-# ──────────────────────────────────────────────
-
-@router.get("/assignments", dependencies=[Depends(require_role(["admin"]))])
-def list_assignments(request: Request, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    assigns = db.query(WorkerAssignment).filter(WorkerAssignment.tenant_id == tid).order_by(WorkerAssignment.route_order).all()
-    result = []
-    for a in assigns:
-        worker = db.query(User).filter(User.id == a.worker_id).first()
-        cust = db.query(Customer).filter(Customer.id == a.customer_id).first()
-        result.append({
-            "id": str(a.id),
-            "worker_id": str(a.worker_id),
-            "customer_id": str(a.customer_id),
-            "route_order": a.route_order,
-            "tenant_id": str(a.tenant_id),
-            "worker_name": worker.username if worker else None,
-            "customer_name": cust.name if cust else None,
-        })
-    return result
-
-@router.post("/assignments", dependencies=[Depends(require_role(["admin"]))])
-def create_assignment(request: Request, data: AssignmentCreate, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    worker = db.query(User).filter(User.id == data.worker_id, User.tenant_id == tid, User.role == "worker").first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    cust = db.query(Customer).filter(Customer.id == data.customer_id, Customer.tenant_id == tid).first()
-    if not cust:
-        raise HTTPException(status_code=404, detail="Customer not found")
-    existing = db.query(WorkerAssignment).filter(
-        WorkerAssignment.worker_id == data.worker_id,
-        WorkerAssignment.customer_id == data.customer_id,
-        WorkerAssignment.tenant_id == tid
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Assignment already exists")
-    assign = WorkerAssignment(
-        tenant_id=tid,
-        worker_id=data.worker_id,
-        customer_id=data.customer_id,
-        route_order=data.route_order
-    )
-    db.add(assign)
-    db.commit()
-    db.refresh(assign)
-    return {
-        "id": str(assign.id),
-        "worker_id": str(assign.worker_id),
-        "customer_id": str(assign.customer_id),
-        "route_order": assign.route_order,
-        "worker_name": worker.username,
-        "customer_name": cust.name,
-    }
-
-@router.delete("/assignments/{assign_id}", dependencies=[Depends(require_role(["admin"]))])
-def delete_assignment(request: Request, assign_id: str, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    assign = db.query(WorkerAssignment).filter(
-        WorkerAssignment.id == _parse_uuid(assign_id), WorkerAssignment.tenant_id == tid
-    ).first()
-    if not assign:
-        raise HTTPException(status_code=404, detail="Assignment not found")
-    db.delete(assign)
-    db.commit()
-    return {"status": "deleted"}
-
-
-# ──────────────────────────────────────────────
 # BILLING / INVOICES
 # ──────────────────────────────────────────────
 
@@ -682,112 +547,6 @@ def mark_invoice_paid(request: Request, invoice_id: str, db: Session = Depends(g
 
 
 # ──────────────────────────────────────────────
-# SALARY MANAGEMENT
-# ──────────────────────────────────────────────
-
-@router.get("/salaries", dependencies=[Depends(require_role(["admin"]))])
-def list_salaries(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    q = db.query(Salary).filter(Salary.tenant_id == tid)
-    if month:
-        q = q.filter(Salary.month == month)
-    if year:
-        q = q.filter(Salary.year == year)
-    salaries = q.order_by(Salary.year.desc(), Salary.month.desc()).all()
-    result = []
-    for s in salaries:
-        worker = db.query(User).filter(User.id == s.worker_id).first()
-        result.append({
-            "id": str(s.id),
-            "tenant_id": str(s.tenant_id),
-            "worker_id": str(s.worker_id),
-            "month": s.month,
-            "year": s.year,
-            "base_salary": float(s.base_salary or 0.0),
-            "bonus": float(s.bonus or 0.0),
-            "deductions": float(s.deductions or 0.0),
-            "total_amount": float(s.total_amount or 0.0),
-            "status": s.status,
-            "notes": s.notes,
-            "created_at": s.created_at.isoformat() if s.created_at else None,
-            "worker_name": worker.username if worker else None,
-        })
-    return result
-
-
-@router.post("/salaries", dependencies=[Depends(require_role(["admin"]))])
-def create_salary(request: Request, data: SalaryCreate, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    worker = db.query(User).filter(User.id == data.worker_id, User.tenant_id == tid, User.role == "worker").first()
-    if not worker:
-        raise HTTPException(status_code=404, detail="Worker not found")
-    existing = db.query(Salary).filter(
-        Salary.tenant_id == tid, Salary.worker_id == data.worker_id,
-        Salary.month == data.month, Salary.year == data.year
-    ).first()
-    if existing:
-        raise HTTPException(status_code=400, detail="Salary record already exists for this worker/month")
-    total = data.base_salary + data.bonus - data.deductions
-    salary = Salary(
-        tenant_id=tid, worker_id=data.worker_id,
-        month=data.month, year=data.year,
-        base_salary=data.base_salary, bonus=data.bonus,
-        deductions=data.deductions, total_amount=round(total, 2),
-        notes=data.notes, status="pending"
-    )
-    db.add(salary)
-    db.commit()
-    db.refresh(salary)
-    return {
-        "id": str(salary.id), "total_amount": float(salary.total_amount),
-        "status": "created", "worker_name": worker.username,
-    }
-
-
-@router.put("/salaries/{salary_id}", dependencies=[Depends(require_role(["admin"]))])
-def update_salary(request: Request, salary_id: str, data: SalaryUpdate, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
-    if not salary:
-        raise HTTPException(status_code=404, detail="Salary not found")
-    if data.base_salary is not None:
-        salary.base_salary = data.base_salary
-    if data.bonus is not None:
-        salary.bonus = data.bonus
-    if data.deductions is not None:
-        salary.deductions = data.deductions
-    if data.notes is not None:
-        salary.notes = data.notes
-    if data.status is not None:
-        salary.status = data.status
-    salary.total_amount = round(float(salary.base_salary) + float(salary.bonus) - float(salary.deductions), 2)
-    db.commit()
-    return {"status": "updated"}
-
-
-@router.put("/salaries/{salary_id}/pay", dependencies=[Depends(require_role(["admin"]))])
-def mark_salary_paid(request: Request, salary_id: str, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
-    if not salary:
-        raise HTTPException(status_code=404, detail="Salary not found")
-    salary.status = "paid"
-    db.commit()
-    return {"status": "paid"}
-
-
-@router.delete("/salaries/{salary_id}", dependencies=[Depends(require_role(["admin"]))])
-def delete_salary(request: Request, salary_id: str, db: Session = Depends(get_db)):
-    tid = request.state.tenant_id
-    salary = db.query(Salary).filter(Salary.id == _parse_uuid(salary_id), Salary.tenant_id == tid).first()
-    if not salary:
-        raise HTTPException(status_code=404, detail="Salary not found")
-    db.delete(salary)
-    db.commit()
-    return {"status": "deleted"}
-
-
-# ──────────────────────────────────────────────
 # PRICING GRID
 # ──────────────────────────────────────────────
 
@@ -859,13 +618,7 @@ def profit_loss_report(request: Request, month: int = None, year: int = None, db
         total_returned += s.returned or 0
         total_sold += (s.taken or 0) - (s.returned or 0)
 
-    # Salary expense
-    salaries = db.query(Salary).filter(
-        Salary.tenant_id == tid, Salary.month == month, Salary.year == year
-    ).all()
-    total_salary_expense = sum(float(s.total_amount) for s in salaries)
-
-    total_expenses = total_purchase_cost + total_salary_expense
+    total_expenses = total_purchase_cost
     net_profit = total_revenue - total_expenses
 
     return {
@@ -873,13 +626,11 @@ def profit_loss_report(request: Request, month: int = None, year: int = None, db
         "revenue": {"total": round(total_revenue, 2), "collected": round(collected, 2), "pending": round(pending, 2)},
         "expenses": {
             "purchase_cost": round(total_purchase_cost, 2),
-            "salary": round(total_salary_expense, 2),
             "total": round(total_expenses, 2),
         },
         "stock": {"taken": total_taken, "returned": total_returned, "sold": total_sold},
         "net_profit": round(net_profit, 2),
         "invoices_count": len(invoices),
-        "salaries_count": len(salaries),
     }
 
 
@@ -933,56 +684,6 @@ def stock_reconciliation(request: Request, target_date: str = None, db: Session 
             "newspapers_deficit": sum(1 for r in result if r["status"] == "deficit"),
         }
     }
-
-
-@router.get("/reports/worker-performance", dependencies=[Depends(require_role(["admin"]))])
-def worker_performance(request: Request, month: int = None, year: int = None, db: Session = Depends(get_db)):
-    """Worker performance metrics."""
-    tid = request.state.tenant_id
-    now = date.today()
-    month = month or now.month
-    year = year or now.year
-
-    workers = db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()
-    result = []
-    for w in workers:
-        # Assignments count
-        assignments_count = db.query(func.count(WorkerAssignment.id)).filter(
-            WorkerAssignment.tenant_id == tid, WorkerAssignment.worker_id == w.id
-        ).scalar() or 0
-
-        # Deliveries for the month
-        from sqlalchemy import extract
-        deliveries = db.query(DailyDelivery).filter(
-            DailyDelivery.tenant_id == tid, DailyDelivery.worker_id == w.id,
-            extract('month', DailyDelivery.date) == month,
-            extract('year', DailyDelivery.date) == year
-        ).all()
-        total_deliveries = len(deliveries)
-        delivered = sum(1 for d in deliveries if d.status == "delivered")
-        missed = sum(1 for d in deliveries if d.status == "missed")
-        delivery_rate = round(delivered / total_deliveries * 100, 1) if total_deliveries > 0 else 0.0
-
-        # Salary for the month
-        salary = db.query(Salary).filter(
-            Salary.tenant_id == tid, Salary.worker_id == w.id,
-            Salary.month == month, Salary.year == year
-        ).first()
-
-        result.append({
-            "worker_id": str(w.id),
-            "worker_name": w.username,
-            "assignments": assignments_count,
-            "total_deliveries": total_deliveries,
-            "delivered": delivered,
-            "missed": missed,
-            "delivery_rate": delivery_rate,
-            "salary_amount": float(salary.total_amount) if salary else 0.0,
-            "salary_status": salary.status if salary else "not_set",
-        })
-
-    result.sort(key=lambda x: x["delivery_rate"], reverse=True)
-    return {"month": month, "year": year, "workers": result}
 
 
 @router.get("/reports/summary", dependencies=[Depends(require_role(["admin"]))])
@@ -1100,26 +801,6 @@ def download_stock_recon(request: Request, target_date: str = None,
         io.BytesIO(content),
         media_type="application/pdf",
         headers={"Content-Disposition": f"attachment; filename=stock_recon_{data['date']}.pdf"},
-    )
-
-
-@router.get("/reports/worker-performance/download", dependencies=[Depends(require_role(["admin"]))])
-def download_worker_perf(request: Request, month: int = None, year: int = None,
-                         fmt: str = "pdf", db: Session = Depends(get_db)):
-    """Download Worker Performance report as PDF or Excel."""
-    data = worker_performance(request, month, year, db)
-    if fmt == "excel":
-        content = worker_perf_excel(data)
-        return StreamingResponse(
-            io.BytesIO(content),
-            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            headers={"Content-Disposition": f"attachment; filename=worker_perf_{data['month']}_{data['year']}.xlsx"},
-        )
-    content = worker_perf_pdf(data)
-    return StreamingResponse(
-        io.BytesIO(content),
-        media_type="application/pdf",
-        headers={"Content-Disposition": f"attachment; filename=worker_perf_{data['month']}_{data['year']}.pdf"},
     )
 
 

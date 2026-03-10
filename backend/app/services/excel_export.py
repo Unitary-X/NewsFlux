@@ -14,7 +14,7 @@ from sqlalchemy import func, cast, Date as SaDate
 
 from app.models.models import (
     Newspaper, DailyStock, Customer, CustomerSubscription,
-    WorkerAssignment, Invoice, User
+    Invoice, User
 )
 
 # ── Styling helpers ──────────────────────────────────────────────
@@ -100,36 +100,34 @@ def generate_daily_stock_excel(db: Session, tenant_id, target_date: date) -> byt
 
 
 def generate_daily_deliveries_excel(db: Session, tenant_id, target_date: date) -> bytes:
-    """Daily deliveries report: per-worker customer assignments."""
-    assignments = db.query(WorkerAssignment).filter(
-        WorkerAssignment.tenant_id == tenant_id,
-    ).order_by(WorkerAssignment.worker_id, WorkerAssignment.route_order).all()
-
-    workers = db.query(User).filter(
-        User.tenant_id == tenant_id, User.role == "worker"
-    ).all()
-    worker_map = {w.id: w.username for w in workers}
-
+    """Daily deliveries report: customer subscriptions list."""
     customers = db.query(Customer).filter(Customer.tenant_id == tenant_id).all()
-    customer_map = {c.id: c.name for c in customers}
+    customer_map = {c.id: c for c in customers}
+
+    subs = db.query(CustomerSubscription).filter(
+        CustomerSubscription.tenant_id == tenant_id,
+        CustomerSubscription.status == 1,
+    ).all()
+
+    newspapers = db.query(Newspaper).filter(Newspaper.tenant_id == tenant_id).all()
+    newspaper_map = {n.id: n.name for n in newspapers}
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Deliveries"
 
-    headers = ["Worker", "Route Order", "Customer", "Customer Phone"]
+    headers = ["Customer", "Phone", "Address", "Newspaper", "Quantity"]
     ws.append(headers)
     _style_header(ws, len(headers))
 
-    cust_detail_map = {c.id: c for c in customers}
-    for a in assignments:
-        worker_name = worker_map.get(a.worker_id, "Unknown")
-        cust = cust_detail_map.get(a.customer_id)
+    for s in subs:
+        cust = customer_map.get(s.customer_id)
         ws.append([
-            worker_name,
-            a.route_order,
             cust.name if cust else "Unknown",
             cust.phone if cust else "",
+            cust.address if cust else "",
+            newspaper_map.get(s.newspaper_id, "Unknown"),
+            s.quantity,
         ])
 
     _auto_width(ws)

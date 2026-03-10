@@ -494,7 +494,7 @@ function BillingPlansSettings() {
     const [plans, setPlans] = useState([]);
     const [loading, setLoading] = useState(true);
     const [showCreate, setShowCreate] = useState(false);
-    const [form, setForm] = useState({ name: '', max_workers: 5, max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
+    const [form, setForm] = useState({ name: '', max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
     const [creating, setCreating] = useState(false);
 
     const fetchPlans = () => api.get('/superadmin/billing-plans').then(res => setPlans(res.data)).finally(() => setLoading(false));
@@ -505,12 +505,12 @@ function BillingPlansSettings() {
         setCreating(true);
         try {
             await api.post('/superadmin/billing-plans', {
-                name: form.name, max_workers: parseInt(form.max_workers),
+                name: form.name,
                 max_customers: parseInt(form.max_customers),
                 price_monthly: parseFloat(form.price_monthly),
                 billing_cycle: form.billing_cycle,
             });
-            setForm({ name: '', max_workers: 5, max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
+            setForm({ name: '', max_customers: 50, price_monthly: 0, billing_cycle: 'monthly' });
             setShowCreate(false);
             fetchPlans();
         } catch (err) {
@@ -554,12 +554,7 @@ function BillingPlansSettings() {
                                 </select>
                             </div>
                         </div>
-                        <div className="grid grid-cols-3 gap-3">
-                            <div>
-                                <label className="block text-xs font-semibold text-slate-400 mb-1">Max Workers</label>
-                                <input type="number" required value={form.max_workers} onChange={e => setForm({ ...form, max_workers: e.target.value })}
-                                    className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2 text-white text-sm focus:outline-none focus:border-amber-500" />
-                            </div>
+                        <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-xs font-semibold text-slate-400 mb-1">Max Customers</label>
                                 <input type="number" required value={form.max_customers} onChange={e => setForm({ ...form, max_customers: e.target.value })}
@@ -603,7 +598,6 @@ function BillingPlansSettings() {
                                 <span className="text-xs text-slate-500">/month</span>
                             </div>
                             <div className="mt-4 space-y-2 text-xs text-slate-400">
-                                <div className="flex justify-between"><span>Max Workers</span><span className="text-white font-bold">{p.max_workers}</span></div>
                                 <div className="flex justify-between"><span>Max Customers</span><span className="text-white font-bold">{p.max_customers}</span></div>
                             </div>
                         </div>

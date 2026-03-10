@@ -10,7 +10,7 @@ from datetime import datetime, date, timedelta
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
     Agency, User, Newspaper, Customer, CustomerSubscription,
-    DailyStock, WorkerAssignment, Invoice, AuditLog,
+    DailyStock, Invoice, AuditLog,
     BillingPlan, AgencyTemplate, Announcement, PlatformSettings
 )
 from app.core.security import get_password_hash, create_access_token
@@ -29,7 +29,6 @@ class AgencyResponse(BaseModel):
     name: str
     status: str
     billing_plan_id: Optional[UUID] = None
-    worker_count: int = 0
     customer_count: int = 0
     subscription_count: int = 0
     model_config = ConfigDict(from_attributes=True)
@@ -39,7 +38,6 @@ class AgencyDetailResponse(BaseModel):
     name: str
     status: str
     created_at: Optional[datetime] = None
-    worker_count: int = 0
     customer_count: int = 0
     newspaper_count: int = 0
     model_config = ConfigDict(from_attributes=True)
@@ -54,7 +52,6 @@ class PlatformAnalytics(BaseModel):
     total_agencies: int
     active_agencies: int
     suspended_agencies: int
-    total_workers: int
     total_customers: int
     total_newspapers: int
     total_invoices: int
@@ -69,7 +66,6 @@ class TopAgency(BaseModel):
     id: UUID
     name: str
     customer_count: int
-    worker_count: int
     newspaper_count: int
 
 class AuditLogResponse(BaseModel):
@@ -111,14 +107,12 @@ class CreateAnnouncementRequest(BaseModel):
 # --- Billing plan schemas ---
 class CreateBillingPlanRequest(BaseModel):
     name: str
-    max_workers: int = 5
     max_customers: int = 50
     price_monthly: float = 0.0
     billing_cycle: str = "monthly"
 
 class UpdateBillingPlanRequest(BaseModel):
     name: Optional[str] = None
-    max_workers: Optional[int] = None
     max_customers: Optional[int] = None
     price_monthly: Optional[float] = None
     billing_cycle: Optional[str] = None
@@ -142,7 +136,6 @@ def list_all_agencies(request: Request, db: Session = Depends(get_db)):
     agencies = db.query(Agency).all()
     result = []
     for agency in agencies:
-        worker_count = db.query(func.count(User.id)).filter(User.tenant_id == agency.id, User.role == "worker").scalar() or 0
         customer_count = db.query(func.count(Customer.id)).filter(Customer.tenant_id == agency.id).scalar() or 0
         subscription_count = db.query(func.count(CustomerSubscription.id)).filter(CustomerSubscription.tenant_id == agency.id).scalar() or 0
         result.append({
@@ -150,7 +143,6 @@ def list_all_agencies(request: Request, db: Session = Depends(get_db)):
             "name": agency.name,
             "status": agency.status,
             "billing_plan_id": agency.billing_plan_id,
-            "worker_count": worker_count,
             "customer_count": customer_count,
             "subscription_count": subscription_count
         })
@@ -163,7 +155,6 @@ def get_agency_detail(request: Request, agency_id: str, db: Session = Depends(ge
     agency = db.query(Agency).filter(Agency.id == uid).first()
     if not agency:
         raise HTTPException(status_code=404, detail="Agency not found")
-    worker_count = db.query(func.count(User.id)).filter(User.tenant_id == uid, User.role == "worker").scalar()
     customer_count = db.query(func.count(Customer.id)).filter(Customer.tenant_id == uid).scalar()
     newspaper_count = db.query(func.count(Newspaper.id)).filter(Newspaper.tenant_id == uid).scalar()
     plan_name = None
@@ -174,7 +165,7 @@ def get_agency_detail(request: Request, agency_id: str, db: Session = Depends(ge
         "id": agency.id, "name": agency.name, "status": agency.status,
         "created_at": agency.created_at, "billing_plan_id": str(agency.billing_plan_id) if agency.billing_plan_id else None,
         "billing_plan_name": plan_name,
-        "worker_count": worker_count, "customer_count": customer_count, "newspaper_count": newspaper_count
+        "customer_count": customer_count, "newspaper_count": newspaper_count
     }
 
 @router.put("/agencies/{agency_id}/status", response_model=AgencyResponse, dependencies=[Depends(require_role(["super_admin"]))])
@@ -240,7 +231,6 @@ def delete_agency(request: Request, agency_id: str, db: Session = Depends(get_db
     db.query(AuditLog).filter(AuditLog.tenant_id == uid).delete()
     db.query(Invoice).filter(Invoice.tenant_id == uid).delete()
     db.query(DailyStock).filter(DailyStock.tenant_id == uid).delete()
-    db.query(WorkerAssignment).filter(WorkerAssignment.tenant_id == uid).delete()
     db.query(CustomerSubscription).filter(CustomerSubscription.tenant_id == uid).delete()
     db.query(Customer).filter(Customer.tenant_id == uid).delete()
     db.query(Newspaper).filter(Newspaper.tenant_id == uid).delete()
@@ -260,7 +250,6 @@ def get_platform_analytics(request: Request, db: Session = Depends(get_db)):
     total_agencies = db.query(func.count(Agency.id)).scalar()
     active_agencies = db.query(func.count(Agency.id)).filter(Agency.status == "active").scalar()
     suspended_agencies = total_agencies - active_agencies
-    total_workers = db.query(func.count(User.id)).filter(User.role == "worker").scalar()
     total_customers = db.query(func.count(Customer.id)).scalar()
     total_newspapers = db.query(func.count(Newspaper.id)).scalar()
     total_invoices = db.query(func.count(Invoice.id)).scalar()
@@ -268,7 +257,7 @@ def get_platform_analytics(request: Request, db: Session = Depends(get_db)):
     paid_invoices = db.query(func.count(Invoice.id)).filter(Invoice.status == "paid").scalar()
     return PlatformAnalytics(
         total_agencies=total_agencies, active_agencies=active_agencies, suspended_agencies=suspended_agencies,
-        total_workers=total_workers, total_customers=total_customers, total_newspapers=total_newspapers,
+        total_customers=total_customers, total_newspapers=total_newspapers,
         total_invoices=total_invoices, pending_invoices=pending_invoices, paid_invoices=paid_invoices
     )
 
@@ -283,13 +272,11 @@ def get_analytics_trends(request: Request, db: Session = Depends(get_db)):
             func.date(Agency.created_at) <= d
         ).scalar()
         customers = db.query(func.count(Customer.id)).scalar() if i == 0 else max(0, db.query(func.count(Customer.id)).scalar() - i)
-        workers = db.query(func.count(User.id)).filter(User.role == "worker").scalar() if i == 0 else max(0, db.query(func.count(User.id)).filter(User.role == "worker").scalar() - i)
         newspapers = db.query(func.count(Newspaper.id)).scalar() if i == 0 else max(0, db.query(func.count(Newspaper.id)).scalar() - i)
         days.append({
             "date": d.isoformat(),
             "agencies": agencies,
             "customers": customers,
-            "workers": workers,
             "newspapers": newspapers,
         })
     return days
@@ -320,9 +307,8 @@ def get_top_agencies(request: Request, db: Session = Depends(get_db)):
     ranked = []
     for a in agencies:
         c_count = db.query(func.count(Customer.id)).filter(Customer.tenant_id == a.id).scalar()
-        w_count = db.query(func.count(User.id)).filter(User.tenant_id == a.id, User.role == "worker").scalar()
         n_count = db.query(func.count(Newspaper.id)).filter(Newspaper.tenant_id == a.id).scalar()
-        ranked.append(TopAgency(id=a.id, name=a.name, customer_count=c_count, worker_count=w_count, newspaper_count=n_count))
+        ranked.append(TopAgency(id=a.id, name=a.name, customer_count=c_count, newspaper_count=n_count))
     ranked.sort(key=lambda x: x.customer_count, reverse=True)
     return ranked[:10]
 
@@ -631,7 +617,7 @@ def list_billing_plans(request: Request, db: Session = Depends(get_db)):
     """ List all billing plans. """
     plans = db.query(BillingPlan).order_by(BillingPlan.created_at.desc()).all()
     return [{
-        "id": str(p.id), "name": p.name, "max_workers": p.max_workers,
+        "id": str(p.id), "name": p.name,
         "max_customers": p.max_customers, "price_monthly": float(p.price_monthly),
         "billing_cycle": p.billing_cycle,
         "created_at": p.created_at.isoformat() if p.created_at else None,
@@ -642,7 +628,6 @@ def create_billing_plan(request: Request, payload: CreateBillingPlanRequest, db:
     """ Create a new billing plan. """
     plan = BillingPlan(
         name=payload.name,
-        max_workers=payload.max_workers,
         max_customers=payload.max_customers,
         price_monthly=payload.price_monthly,
         billing_cycle=payload.billing_cycle,
@@ -661,8 +646,6 @@ def update_billing_plan(request: Request, plan_id: str, payload: UpdateBillingPl
         raise HTTPException(status_code=404, detail="Billing plan not found")
     if payload.name is not None:
         plan.name = payload.name
-    if payload.max_workers is not None:
-        plan.max_workers = payload.max_workers
     if payload.max_customers is not None:
         plan.max_customers = payload.max_customers
     if payload.price_monthly is not None:
@@ -911,7 +894,6 @@ def export_database_json(db: Session = Depends(get_db)):
         "customers": Customer,
         "customer_subscriptions": CustomerSubscription,
         "daily_stock": DailyStock,
-        "worker_assignments": WorkerAssignment,
         "invoices": Invoice,
         "audit_logs": AuditLog,
         "billing_plans": BillingPlan,
@@ -954,7 +936,6 @@ def export_database_sql(db: Session = Depends(get_db)):
         "customers": Customer,
         "customer_subscriptions": CustomerSubscription,
         "daily_stock": DailyStock,
-        "worker_assignments": WorkerAssignment,
         "invoices": Invoice,
         "audit_logs": AuditLog,
         "billing_plans": BillingPlan,
@@ -1026,7 +1007,6 @@ def database_backup_stats(db: Session = Depends(get_db)):
         "customers": Customer,
         "customer_subscriptions": CustomerSubscription,
         "daily_stock": DailyStock,
-        "worker_assignments": WorkerAssignment,
         "invoices": Invoice,
         "audit_logs": AuditLog,
         "billing_plans": BillingPlan,
@@ -1056,7 +1036,6 @@ TABLE_MODEL_MAP = {
     "customers": Customer,
     "customer_subscriptions": CustomerSubscription,
     "daily_stock": DailyStock,
-    "worker_assignments": WorkerAssignment,
     "invoices": Invoice,
     "audit_logs": AuditLog,
     "billing_plans": BillingPlan,
@@ -1095,7 +1074,7 @@ async def upload_database_json(file: UploadFile = File(...), db: Session = Depen
     ordered_tables = [
         "billing_plans", "platform_settings", "agencies", "users",
         "newspapers", "customers", "customer_subscriptions",
-        "daily_stock", "worker_assignments", "invoices",
+        "daily_stock", "invoices",
         "audit_logs", "agency_templates", "announcements",
     ]
 

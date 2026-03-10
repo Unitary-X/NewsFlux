@@ -1,20 +1,18 @@
 import React, { useState, useEffect } from 'react';
-import { Users, UserSquare2, BookOpen, Package, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil, Save, Calendar } from 'lucide-react';
+import { Users, BookOpen, Package, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil, Save, Calendar } from 'lucide-react';
 import api from '../../utils/api';
 
 export default function Agency() {
-    const [workers, setWorkers] = useState([]);
     const [customers, setCustomers] = useState([]);
     const [subscriptions, setSubscriptions] = useState([]);
     const [newspapers, setNewspapers] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [activeTab, setActiveTab] = useState('workers');
+    const [activeTab, setActiveTab] = useState('customers');
     const [search, setSearch] = useState('');
     const [showForm, setShowForm] = useState(false);
     const [submitting, setSubmitting] = useState(false);
 
     // Forms
-    const [workerForm, setWorkerForm] = useState({ username: '', password: '' });
     const [customerForm, setCustomerForm] = useState({ name: '', phone: '', address: '' });
     const [subForm, setSubForm] = useState({ customer_id: '', newspaper_id: '', quantity: 1, price: '', subscription_type: 'daily' });
 
@@ -34,13 +32,11 @@ export default function Agency() {
     const loadData = async () => {
         setLoading(true);
         try {
-            const [workersRes, customersRes, subscriptionsRes, newspapersRes] = await Promise.all([
-                api.get('/admin/workers'),
+            const [customersRes, subscriptionsRes, newspapersRes] = await Promise.all([
                 api.get('/admin/customers'),
                 api.get('/admin/subscriptions'),
                 api.get('/admin/newspapers'),
             ]);
-            setWorkers(workersRes.data);
             setCustomers(customersRes.data);
             setSubscriptions(subscriptionsRes.data);
             setNewspapers(newspapersRes.data);
@@ -52,19 +48,6 @@ export default function Agency() {
     };
 
     // --- Create handlers ---
-    const addWorker = async (e) => {
-        e.preventDefault();
-        setSubmitting(true);
-        try {
-            await api.post('/admin/workers', workerForm);
-            setWorkerForm({ username: '', password: '' });
-            setShowForm(false);
-            loadData();
-        } catch (err) {
-            alert(err.response?.data?.detail || 'Failed to add worker');
-        } finally { setSubmitting(false); }
-    };
-
     const addCustomer = async (e) => {
         e.preventDefault();
         setSubmitting(true);
@@ -132,10 +115,6 @@ export default function Agency() {
     }, 0);
 
     // --- Delete handlers ---
-    const deleteWorker = async (id, name) => {
-        if (!confirm(`Delete worker "${name}"?`)) return;
-        try { await api.delete(`/admin/workers/${id}`); loadData(); } catch { alert('Failed to delete'); }
-    };
     const deleteCustomer = async (id, name) => {
         if (!confirm(`Delete "${name}"? Subscriptions & invoices will also be removed.`)) return;
         try { await api.delete(`/admin/customers/${id}`); loadData(); } catch { alert('Failed to delete'); }
@@ -146,17 +125,8 @@ export default function Agency() {
     };
 
     // --- Edit handlers ---
-    const startEditWorker = (w) => { setEditId(w.id); setEditData({ username: w.username, password: '' }); };
     const startEditCustomer = (c) => { setEditId(c.id); setEditData({ name: c.name, phone: c.phone || '', address: c.address || '' }); };
 
-    const saveEditWorker = async () => {
-        try {
-            const payload = { username: editData.username };
-            if (editData.password) payload.password = editData.password;
-            await api.put(`/admin/workers/${editId}`, payload);
-            setEditId(null); loadData();
-        } catch { alert('Failed to update'); }
-    };
     const saveEditCustomer = async () => {
         try {
             await api.put(`/admin/customers/${editId}`, editData);
@@ -171,7 +141,6 @@ export default function Agency() {
     };
 
     // --- Filtering ---
-    const filteredWorkers = workers.filter(w => w.username.toLowerCase().includes(search.toLowerCase()));
     const filteredCustomers = customers.filter(c => c.name.toLowerCase().includes(search.toLowerCase()) || (c.phone || '').includes(search));
     const filteredSubs = subscriptions.filter(s => (s.customer_name || '').toLowerCase().includes(search.toLowerCase()) || (s.newspaper_name || '').toLowerCase().includes(search.toLowerCase()));
 
@@ -184,7 +153,7 @@ export default function Agency() {
     }, 0);
 
     const tabs = [
-        { id: 'workers', label: 'Workers', icon: UserSquare2, count: workers.length, color: 'indigo', subtitle: null },
+
         { id: 'customers', label: 'Customers', icon: Users, count: customers.length, color: 'emerald', subtitle: null },
         { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: `${activeSubs.length}/${subscriptions.length}`, color: 'amber', subtitle: `Est. ₹${totalEstMonthly.toFixed(0)}/mo` },
         { id: 'stock', label: 'Daily Stock', icon: Package, count: newspapers.length, color: 'blue', subtitle: stockTotalIncome > 0 ? `₹${stockTotalIncome.toFixed(0)} today` : null },
@@ -202,7 +171,7 @@ export default function Agency() {
     }
 
     const currentTab = tabs.find(t => t.id === activeTab);
-    const currentColor = colorMap[currentTab?.color || 'indigo'];
+    const currentColor = colorMap[currentTab?.color || 'emerald'];
 
     return (
         <div className="max-w-6xl mx-auto space-y-6">
@@ -210,7 +179,7 @@ export default function Agency() {
             <div className="flex justify-between items-end">
                 <div>
                     <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Agency Overview</h1>
-                    <p className="text-slate-500 mt-2">Manage your workers, customers and subscriptions</p>
+                    <p className="text-slate-500 mt-2">Manage your customers and subscriptions</p>
                 </div>
                 <button onClick={loadData} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 transition-colors text-sm font-medium">
                     <RefreshCw className="w-4 h-4" /> Refresh
@@ -322,21 +291,6 @@ export default function Agency() {
                 {/* Inline Add Form */}
                 {showForm && (
                     <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-                        {activeTab === 'workers' && (
-                            <form onSubmit={addWorker} className="flex items-end gap-4">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
-                                    <input value={workerForm.username} onChange={e => setWorkerForm({ ...workerForm, username: e.target.value })} required placeholder="e.g. worker_route1" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
-                                    <input type="password" value={workerForm.password} onChange={e => setWorkerForm({ ...workerForm, password: e.target.value })} required placeholder="Temporary password" autoComplete="new-password" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                </div>
-                                <button type="submit" disabled={submitting} className="bg-indigo-600 hover:bg-indigo-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Worker'}
-                                </button>
-                            </form>
-                        )}
                         {activeTab === 'customers' && (
                             <form onSubmit={addCustomer} className="flex items-end gap-4">
                                 <div className="flex-1">
@@ -399,61 +353,6 @@ export default function Agency() {
 
                 {/* Table Content */}
                 <div>
-                    {activeTab === 'workers' && (
-                        filteredWorkers.length === 0 ? (
-                            <div className="p-12 text-center">
-                                <UserSquare2 className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">No workers found</p>
-                                <p className="text-slate-400 text-sm mt-1">Click "Add" to create a new worker</p>
-                            </div>
-                        ) : (
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Username</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Role</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filteredWorkers.map((worker) => (
-                                        <tr key={worker.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-3.5 flex items-center gap-3">
-                                                <div className="p-2 bg-indigo-100 rounded-lg">
-                                                    <UserSquare2 className="w-4 h-4 text-indigo-600" />
-                                                </div>
-                                                {editId === worker.id ? (
-                                                    <div className="flex items-center gap-2">
-                                                        <input value={editData.username} onChange={e => setEditData({ ...editData, username: e.target.value })} className="border border-indigo-300 rounded-lg px-2 py-1 text-sm w-36" />
-                                                        <input type="password" value={editData.password} onChange={e => setEditData({ ...editData, password: e.target.value })} placeholder="New pwd" className="border border-indigo-300 rounded-lg px-2 py-1 text-sm w-28" />
-                                                    </div>
-                                                ) : (
-                                                    <span className="font-medium text-slate-800">{worker.username}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-3.5">
-                                                <span className="inline-block px-2.5 py-1 rounded-full text-xs font-medium bg-indigo-100 text-indigo-700 capitalize">{worker.role}</span>
-                                            </td>
-                                            <td className="px-6 py-3.5 text-right">
-                                                {editId === worker.id ? (
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={saveEditWorker} className="text-xs bg-indigo-600 text-white px-3 py-1 rounded-lg hover:bg-indigo-700">Save</button>
-                                                        <button onClick={() => setEditId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button onClick={() => startEditWorker(worker)} className="p-1.5 hover:bg-indigo-50 rounded-lg text-indigo-600"><Pencil className="w-4 h-4" /></button>
-                                                        <button onClick={() => deleteWorker(worker.id, worker.username)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )
-                    )}
-
                     {activeTab === 'customers' && (
                         filteredCustomers.length === 0 ? (
                             <div className="p-12 text-center">

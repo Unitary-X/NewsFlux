@@ -1,6 +1,6 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, Receipt, HardDrive, BarChart3, Wallet, IndianRupee, Building2 } from 'lucide-react';
+import { LayoutDashboard, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, Receipt, HardDrive, BarChart3, IndianRupee, Building2 } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
@@ -18,7 +18,6 @@ export default function Sidebar() {
         { to: "/admin/newspapers", label: t('sidebar.newspapers'), icon: Newspaper },
         { to: "/admin/agency", label: t('sidebar.agency') || 'Agency', icon: Building2 },
         { to: "/admin/billing", label: t('sidebar.billing') || 'Billing', icon: Receipt },
-        { to: "/admin/salaries", label: t('sidebar.salaries') || 'Salaries', icon: Wallet },
         { to: "/admin/reports", label: t('sidebar.reports') || 'Reports', icon: BarChart3 },
         { to: "/admin/pricing", label: t('sidebar.pricing') || 'Pricing', icon: IndianRupee },
         { to: "/admin/backup", label: t('sidebar.backup') || 'Backup', icon: HardDrive },

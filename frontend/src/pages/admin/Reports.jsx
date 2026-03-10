@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { Loader2, TrendingUp, TrendingDown, BarChart3, Users, Package, Calendar, Search, AlertTriangle, CheckCircle2, MinusCircle, Download, FileText, FileSpreadsheet } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area, Legend } from 'recharts';
 
-const TABS = ['profit_loss', 'stock_recon', 'worker_perf', 'summary'];
+const TABS = ['profit_loss', 'stock_recon', 'summary'];
 
 /* ─── Download helper ─── */
 async function downloadReport(url, defaultName) {
@@ -61,7 +61,6 @@ export default function Reports() {
     // Data states
     const [plData, setPlData] = useState(null);
     const [reconData, setReconData] = useState(null);
-    const [perfData, setPerfData] = useState(null);
     const [summaryData, setSummaryData] = useState(null);
 
     const fetchPL = async () => {
@@ -82,15 +81,6 @@ export default function Reports() {
         finally { setLoading(false); }
     };
 
-    const fetchPerf = async () => {
-        setLoading(true);
-        try {
-            const res = await api.get(`/admin/reports/worker-performance?month=${month}&year=${year}`);
-            setPerfData(res.data);
-        } catch (err) { console.error(err); }
-        finally { setLoading(false); }
-    };
-
     const fetchSummary = async () => {
         setLoading(true);
         try {
@@ -103,14 +93,12 @@ export default function Reports() {
     useEffect(() => {
         if (activeTab === 'profit_loss') fetchPL();
         else if (activeTab === 'stock_recon') fetchRecon();
-        else if (activeTab === 'worker_perf') fetchPerf();
         else if (activeTab === 'summary') fetchSummary();
     }, [activeTab]);
 
     const tabLabels = {
         profit_loss: t('reports.profit_loss', 'Profit & Loss'),
         stock_recon: t('reports.stock_recon', 'Stock Reconciliation'),
-        worker_perf: t('reports.worker_perf', 'Worker Performance'),
         summary: t('reports.summary', 'Report Summary'),
     };
 
@@ -134,7 +122,6 @@ export default function Reports() {
             {/* Tab content */}
             {activeTab === 'profit_loss' && <ProfitLossTab data={plData} loading={loading} month={month} year={year} setMonth={setMonth} setYear={setYear} onFetch={fetchPL} t={t} />}
             {activeTab === 'stock_recon' && <StockReconTab data={reconData} loading={loading} targetDate={targetDate} setTargetDate={setTargetDate} onFetch={fetchRecon} t={t} />}
-            {activeTab === 'worker_perf' && <WorkerPerfTab data={perfData} loading={loading} month={month} year={year} setMonth={setMonth} setYear={setYear} onFetch={fetchPerf} t={t} />}
             {activeTab === 'summary' && <SummaryTab data={summaryData} loading={loading} period={period} setPeriod={setPeriod} targetDate={targetDate} setTargetDate={setTargetDate} onFetch={fetchSummary} t={t} />}
         </div>
     );
@@ -183,8 +170,6 @@ function ProfitLossTab({ data, loading, month, year, setMonth, setYear, onFetch,
                             <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('reports.expense_breakdown', 'Expense Breakdown')}</h3>
                             <div className="space-y-2 text-sm">
                                 <div className="flex justify-between"><span className="text-slate-500">{t('reports.purchase_cost', 'Newspaper Purchase')}</span><span className="font-medium text-red-600">₹{data.expenses.purchase_cost.toLocaleString()}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-500">{t('reports.salary_expense', 'Worker Salaries')}</span><span className="font-medium text-red-600">₹{data.expenses.salary.toLocaleString()}</span></div>
-                                <div className="flex justify-between"><span className="text-slate-500">{t('reports.salaries_count', 'Salary Records')}</span><span className="font-medium">{data.salaries_count}</span></div>
                             </div>
                         </div>
                     </div>
@@ -276,91 +261,6 @@ function StockReconTab({ data, loading, targetDate, setTargetDate, onFetch, t })
                             </tbody>
                         </table>
                     </div>
-                </div>
-            )}
-        </div>
-    );
-}
-
-/* ─── Worker Performance Tab ─── */
-function WorkerPerfTab({ data, loading, month, year, setMonth, setYear, onFetch, t }) {
-    return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between flex-wrap gap-3">
-                <div className="flex items-center gap-3 flex-wrap">
-                    <select value={month} onChange={e => setMonth(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm">
-                        {Array.from({ length: 12 }, (_, i) => <option key={i + 1} value={i + 1}>{new Date(2000, i).toLocaleString('default', { month: 'long' })}</option>)}
-                    </select>
-                    <input type="number" value={year} onChange={e => setYear(+e.target.value)} className="border border-slate-300 rounded-lg px-3 py-2 text-sm w-24" />
-                    <button onClick={onFetch} disabled={loading} className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50">
-                        {loading ? <Loader2 className="w-4 h-4 animate-spin" /> : t('reports.load', 'Load')}
-                    </button>
-                </div>
-                {data && <DownloadButtons buildUrl={`/admin/reports/worker-performance/download?month=${month}&year=${year}`} baseName={`worker_perf_${month}_${year}`} disabled={loading} t={t} />}
-            </div>
-
-            {loading && <div className="flex justify-center py-12"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>}
-
-            {!loading && data && (
-                <div className="space-y-4">
-                    {data.workers.length === 0 ? (
-                        <p className="text-slate-500 text-center py-8">{t('reports.no_workers', 'No workers found')}</p>
-                    ) : (
-                        <>
-                            {/* Performance chart */}
-                            <div className="bg-white rounded-xl border border-slate-200 p-5">
-                                <h3 className="text-sm font-semibold text-slate-700 mb-3">{t('reports.delivery_rate', 'Delivery Rate by Worker')}</h3>
-                                <ResponsiveContainer width="100%" height={250}>
-                                    <BarChart data={data.workers}>
-                                        <CartesianGrid strokeDasharray="3 3" />
-                                        <XAxis dataKey="worker_name" tick={{ fontSize: 12 }} />
-                                        <YAxis domain={[0, 100]} tick={{ fontSize: 12 }} />
-                                        <Tooltip />
-                                        <Bar dataKey="delivery_rate" fill="#3b82f6" name="Delivery %" radius={[4, 4, 0, 0]} />
-                                    </BarChart>
-                                </ResponsiveContainer>
-                            </div>
-
-                            {/* Workers table */}
-                            <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
-                                <table className="w-full text-sm">
-                                    <thead className="bg-slate-50 text-slate-600">
-                                        <tr>
-                                            <th className="text-left px-4 py-3 font-medium">#</th>
-                                            <th className="text-left px-4 py-3 font-medium">{t('reports.worker', 'Worker')}</th>
-                                            <th className="text-right px-4 py-3 font-medium">{t('reports.assignments', 'Assignments')}</th>
-                                            <th className="text-right px-4 py-3 font-medium">{t('reports.delivered', 'Delivered')}</th>
-                                            <th className="text-right px-4 py-3 font-medium">{t('reports.missed', 'Missed')}</th>
-                                            <th className="text-right px-4 py-3 font-medium">{t('reports.rate', 'Rate')}</th>
-                                            <th className="text-right px-4 py-3 font-medium">{t('reports.salary', 'Salary')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {data.workers.map((w, i) => (
-                                            <tr key={w.worker_id} className="hover:bg-slate-50">
-                                                <td className="px-4 py-3 text-slate-400">{i + 1}</td>
-                                                <td className="px-4 py-3 font-medium">{w.worker_name}</td>
-                                                <td className="px-4 py-3 text-right">{w.assignments}</td>
-                                                <td className="px-4 py-3 text-right text-green-600">{w.delivered}</td>
-                                                <td className="px-4 py-3 text-right text-red-600">{w.missed}</td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <span className={`font-bold ${w.delivery_rate >= 90 ? 'text-green-600' : w.delivery_rate >= 70 ? 'text-amber-600' : 'text-red-600'}`}>
-                                                        {w.delivery_rate}%
-                                                    </span>
-                                                </td>
-                                                <td className="px-4 py-3 text-right">
-                                                    <span className="font-medium">₹{w.salary_amount.toLocaleString()}</span>
-                                                    <span className={`ml-1 text-xs ${w.salary_status === 'paid' ? 'text-green-500' : 'text-slate-400'}`}>
-                                                        ({w.salary_status})
-                                                    </span>
-                                                </td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
-                            </div>
-                        </>
-                    )}
                 </div>
             )}
         </div>

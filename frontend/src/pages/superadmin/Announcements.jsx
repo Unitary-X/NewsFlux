@@ -65,7 +65,7 @@ export default function Announcements() {
     };
 
     const audienceLabel = (audience) => {
-        const map = { all: 'Everyone', admins: 'Admins Only', workers: 'Workers Only', specific_agency: 'Specific Agency' };
+        const map = { all: 'Everyone', admins: 'Admins Only', specific_agency: 'Specific Agency' };
         return map[audience] || audience;
     };
 
@@ -73,7 +73,6 @@ export default function Announcements() {
         const map = {
             all: 'bg-indigo-500/10 text-indigo-400 border-indigo-500/20',
             admins: 'bg-cyan-500/10 text-cyan-400 border-cyan-500/20',
-            workers: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
             specific_agency: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
         };
         return map[audience] || 'bg-slate-500/10 text-slate-400 border-slate-500/20';
@@ -177,7 +176,6 @@ export default function Announcements() {
                                     className="w-full bg-slate-800/50 border border-slate-700 rounded-lg px-3 py-2.5 text-white focus:outline-none focus:border-indigo-500 text-sm">
                                     <option value="all">Everyone</option>
                                     <option value="admins">Admins Only</option>
-                                    <option value="workers">Workers Only</option>
                                     <option value="specific_agency">Specific Agency</option>
                                 </select>
                             </div>

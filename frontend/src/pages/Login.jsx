@@ -41,7 +41,6 @@ export default function Login() {
 
             // Role-based routing
             if (payload.role === 'admin') navigate('/admin');
-            else if (payload.role === 'worker') navigate('/worker');
             else if (payload.role === 'super_admin') navigate('/superadmin');
             else navigate('/');
 

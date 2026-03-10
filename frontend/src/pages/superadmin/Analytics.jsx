@@ -63,9 +63,8 @@ export default function Analytics() {
             </div>
 
             {/* Summary Stats Row */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <StatBox label="Agencies" value={analytics?.total_agencies} icon={Building2} />
-                <StatBox label="Workers" value={analytics?.total_workers} icon={Users} />
                 <StatBox label="Customers" value={analytics?.total_customers} icon={Users} />
                 <StatBox label="Newspapers" value={analytics?.total_newspapers} icon={Newspaper} />
                 <StatBox label="Invoices" value={analytics?.total_invoices} icon={TrendingUp} />
