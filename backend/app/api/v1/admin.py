@@ -10,9 +10,9 @@ import io
 
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
-    Newspaper, User, Customer, DailyStock, 
+    Newspaper, User, Customer, DailyStock,
     CustomerSubscription, Invoice, Agency,
-    DailyDelivery
+    DailyDelivery, WorkerAssignment, WorkerDailyStock
 )
 from app.schemas.admin import (
     NewspaperCreate, NewspaperUpdate, NewspaperResponse,
@@ -20,7 +20,9 @@ from app.schemas.admin import (
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     InvoiceResponse, GenerateBillsRequest,
     PricingGridUpdate,
+    WorkerCreate, WorkerStockEntry,
 )
+from app.core.security import get_password_hash
 
 from app.services.report_generator import (
     profit_loss_pdf, profit_loss_excel,
@@ -846,6 +848,139 @@ def get_announcements(request: Request, db: Session = Depends(get_db)):
         "id": str(a.id), "title": a.title, "message": a.message,
         "created_at": a.created_at.isoformat() if a.created_at else None,
     } for a in anns]
+
+
+# ──────────────────────────────────────────────
+# WORKERS
+# ──────────────────────────────────────────────
+
+@router.get("/workers", dependencies=[Depends(require_role(["admin"]))])
+def list_workers(request: Request, db: Session = Depends(get_db)):
+    """List all delivery workers belonging to this agency."""
+    tid = request.state.tenant_id
+    workers = db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()
+    return [{"id": str(w.id), "username": w.username} for w in workers]
+
+
+@router.post("/workers", dependencies=[Depends(require_role(["admin"]))])
+def create_worker(request: Request, data: WorkerCreate, db: Session = Depends(get_db)):
+    """Create a new delivery worker account for this agency."""
+    tid = request.state.tenant_id
+    existing = db.query(User).filter(User.username == data.username).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Username already exists")
+    worker = User(
+        username=data.username,
+        password_hash=get_password_hash(data.password),
+        role="worker",
+        tenant_id=tid,
+    )
+    db.add(worker)
+    db.commit()
+    db.refresh(worker)
+    return {"id": str(worker.id), "username": worker.username}
+
+
+# NOTE: /workers/stock must be declared BEFORE /workers/{worker_id}
+# so FastAPI does not treat the literal "stock" path segment as a UUID.
+
+@router.get("/workers/stock", dependencies=[Depends(require_role(["admin"]))])
+def get_worker_stock(request: Request, target_date: str = None, db: Session = Depends(get_db)):
+    """Get all worker daily stock entries for a given date (defaults to today)."""
+    tid = request.state.tenant_id
+    d = target_date or str(date.today())
+    entries = db.query(WorkerDailyStock).filter(
+        WorkerDailyStock.tenant_id == tid,
+        WorkerDailyStock.date == d
+    ).all()
+    worker_map = {str(w.id): w.username for w in db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()}
+    paper_map = {str(p.id): p.name for p in db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()}
+    return [{
+        "id": str(e.id),
+        "worker_id": str(e.worker_id),
+        "worker_name": worker_map.get(str(e.worker_id), "Unknown"),
+        "newspaper_id": str(e.newspaper_id),
+        "newspaper_name": paper_map.get(str(e.newspaper_id), "Unknown"),
+        "date": str(e.date),
+        "taken": e.taken or 0,
+        "returned": e.returned or 0,
+        "sold": (e.taken or 0) - (e.returned or 0),
+        "amount_given": float(e.amount_given) if e.amount_given else 0.0,
+    } for e in entries]
+
+
+@router.post("/workers/stock", dependencies=[Depends(require_role(["admin"]))])
+def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = Depends(get_db)):
+    """Create or update a worker's daily stock entry (taken / returned / amount given)."""
+    tid = request.state.tenant_id
+    uid = _parse_uuid(str(data.worker_id))
+    nid = _parse_uuid(str(data.newspaper_id))
+    # Verify ownership
+    worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    existing = db.query(WorkerDailyStock).filter(
+        WorkerDailyStock.tenant_id == tid,
+        WorkerDailyStock.worker_id == uid,
+        WorkerDailyStock.newspaper_id == nid,
+        WorkerDailyStock.date == data.date
+    ).first()
+    if existing:
+        existing.taken = data.taken
+        existing.returned = data.returned
+        existing.amount_given = data.amount_given
+    else:
+        db.add(WorkerDailyStock(
+            tenant_id=tid,
+            worker_id=uid,
+            newspaper_id=nid,
+            date=data.date,
+            taken=data.taken,
+            returned=data.returned,
+            amount_given=data.amount_given,
+        ))
+    db.commit()
+    return {"status": "success"}
+
+
+@router.get("/workers/{worker_id}/summary", dependencies=[Depends(require_role(["admin"]))])
+def get_worker_summary(request: Request, worker_id: str, db: Session = Depends(get_db)):
+    """All-time totals for a single worker: taken, returned, sold, amount given."""
+    tid = request.state.tenant_id
+    uid = _parse_uuid(worker_id)
+    worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    entries = db.query(WorkerDailyStock).filter(
+        WorkerDailyStock.tenant_id == tid,
+        WorkerDailyStock.worker_id == uid
+    ).all()
+    total_taken = sum(e.taken or 0 for e in entries)
+    total_returned = sum(e.returned or 0 for e in entries)
+    return {
+        "worker_id": str(uid),
+        "username": worker.username,
+        "total_taken": total_taken,
+        "total_returned": total_returned,
+        "total_sold": total_taken - total_returned,
+        "total_amount_given": round(sum(float(e.amount_given) for e in entries if e.amount_given), 2),
+        "entries_count": len(entries),
+    }
+
+
+@router.delete("/workers/{worker_id}", dependencies=[Depends(require_role(["admin"]))])
+def delete_worker(request: Request, worker_id: str, db: Session = Depends(get_db)):
+    """Delete a worker and all their related records."""
+    tid = request.state.tenant_id
+    uid = _parse_uuid(worker_id)
+    worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    db.query(WorkerAssignment).filter(WorkerAssignment.worker_id == uid, WorkerAssignment.tenant_id == tid).delete()
+    db.query(WorkerDailyStock).filter(WorkerDailyStock.worker_id == uid, WorkerDailyStock.tenant_id == tid).delete()
+    db.delete(worker)
+    db.commit()
+    return {"status": "deleted"}
 
 
 # ──────────────────────────────────────────────

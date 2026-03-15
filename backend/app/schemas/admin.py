@@ -98,3 +98,21 @@ class PricingGridEntry(BaseModel):
 
 class PricingGridUpdate(BaseModel):
     prices: List[PricingGridEntry]
+
+# --- WORKERS ---
+class WorkerCreate(BaseModel):
+    username: str
+    password: str
+
+class WorkerResponse(BaseModel):
+    id: UUID
+    username: str
+    model_config = ConfigDict(from_attributes=True)
+
+class WorkerStockEntry(BaseModel):
+    worker_id: UUID
+    newspaper_id: UUID
+    date: date
+    taken: int = 0
+    returned: int = 0
+    amount_given: float = 0.0

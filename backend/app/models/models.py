@@ -171,3 +171,22 @@ class Backup(Base):
     error_message = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+class WorkerDailyStock(Base):
+    """Per-worker, per-newspaper, per-day paper ledger tracked by the admin.
+    Records how many papers a worker took, returned, and how much money they gave.
+    sold = taken - returned (computed property, not stored).
+    """
+    __tablename__ = "worker_daily_stock"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
+    worker_id = Column(Uuid, ForeignKey("users.id"), nullable=False)
+    newspaper_id = Column(Uuid, ForeignKey("newspapers.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    taken = Column(Integer, default=0)
+    returned = Column(Integer, default=0)
+    amount_given = Column(DECIMAL(10, 2), default=0.00)  # cash collected from worker
+
+    @property
+    def sold(self):
+        return (self.taken or 0) - (self.returned or 0)
