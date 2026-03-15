@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+﻿import React, { useState, useEffect } from 'react';
 import { Users, BookOpen, Package, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil, Save, Calendar, IndianRupee, TrendingUp } from 'lucide-react';
 import api from '../../utils/api';
 
@@ -235,8 +235,8 @@ export default function Agency() {
 
     const tabs = [
         { id: 'customers', label: 'Customers', icon: Users, count: customers.length, color: 'emerald', subtitle: null },
-        { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: `${activeSubs.length}/${subscriptions.length}`, color: 'amber', subtitle: `Est. ₹${totalEstMonthly.toFixed(0)}/mo` },
-        { id: 'stock', label: 'Daily Stock', icon: Package, count: newspapers.length, color: 'blue', subtitle: stockTotalIncome > 0 ? `₹${stockTotalIncome.toFixed(0)} today` : null },
+        { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: `${activeSubs.length}/${subscriptions.length}`, color: 'amber', subtitle: `Est. â‚¹${totalEstMonthly.toFixed(0)}/mo` },
+        { id: 'stock', label: 'Daily Stock', icon: Package, count: newspapers.length, color: 'blue', subtitle: stockTotalIncome > 0 ? `â‚¹${stockTotalIncome.toFixed(0)} today` : null },
         { id: 'workers', label: 'Workers', icon: Users, count: workers.length, color: 'indigo', subtitle: null },
     ];
 
@@ -408,7 +408,7 @@ export default function Agency() {
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Newspaper</label>
                                     <select value={subForm.newspaper_id} onChange={e => setSubForm({ ...subForm, newspaper_id: e.target.value })} required className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
                                         <option value="">Select...</option>
-                                        {newspapers.map(n => <option key={n.id} value={n.id}>{n.name} (₹{Number(n.base_price).toFixed(2)})</option>)}
+                                        {newspapers.map(n => <option key={n.id} value={n.id}>{n.name} (â‚¹{Number(n.base_price).toFixed(2)})</option>)}
                                     </select>
                                 </div>
                                 <div className="w-24">
@@ -436,7 +436,7 @@ export default function Agency() {
                     </div>
                 )}
 
-                {/* ── CUSTOMERS ── */}
+                {/* â”€â”€ CUSTOMERS â”€â”€ */}
                 {activeTab === 'customers' && (
                     filteredCustomers.length === 0 ? (
                         <div className="p-12 text-center">
@@ -497,7 +497,7 @@ export default function Agency() {
                     )
                 )}
 
-                {/* ── SUBSCRIPTIONS ── */}
+                {/* â”€â”€ SUBSCRIPTIONS â”€â”€ */}
                 {activeTab === 'subscriptions' && (
                     filteredSubs.length === 0 ? (
                         <div className="p-12 text-center">
@@ -508,8 +508,8 @@ export default function Agency() {
                     ) : (
                         <>
                             <div className="mx-6 mt-4 mb-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-start gap-2">
-                                <span className="mt-0.5 shrink-0">ℹ️</span>
-                                <div><span className="font-semibold">Billing model: </span>Monthly = (price × qty × days) + service charge &nbsp;|&nbsp; Yearly = (price × qty × days), no service charge</div>
+                                <span className="mt-0.5 shrink-0">â„¹ï¸</span>
+                                <div><span className="font-semibold">Billing model: </span>Monthly = (price Ã— qty Ã— days) + service charge &nbsp;|&nbsp; Yearly = (price Ã— qty Ã— days), no service charge</div>
                             </div>
                             <table className="w-full text-left">
                                 <thead>
@@ -549,9 +549,9 @@ export default function Agency() {
                                                     </div>
                                                 </td>
                                                 <td className="px-6 py-3.5 text-center text-slate-700 font-medium">{sub.quantity}</td>
-                                                <td className="px-6 py-3.5 text-right text-slate-700">₹{dailyPrice.toFixed(2)}</td>
+                                                <td className="px-6 py-3.5 text-right text-slate-700">â‚¹{dailyPrice.toFixed(2)}</td>
                                                 <td className="px-6 py-3.5 text-right">
-                                                    <span className="font-semibold text-slate-800">₹{estMonthly.toFixed(0)}</span>
+                                                    <span className="font-semibold text-slate-800">â‚¹{estMonthly.toFixed(0)}</span>
                                                     <span className="text-[10px] text-slate-400 block">/month est.</span>
                                                 </td>
                                                 <td className="px-6 py-3.5 text-center">
@@ -571,7 +571,7 @@ export default function Agency() {
                     )
                 )}
 
-                {/* ── STOCK ── */}
+                {/* â”€â”€ STOCK â”€â”€ */}
                 {activeTab === 'stock' && (
                     stockLoading ? (
                         <div className="flex items-center justify-center py-24"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
@@ -604,7 +604,7 @@ export default function Agency() {
                                                     <div className="p-2 bg-blue-100 rounded-lg"><Package className="w-4 h-4 text-blue-600" /></div>
                                                     <div>
                                                         <span className="font-medium text-slate-800">{paper.name}</span>
-                                                        <div className="text-xs text-slate-400">₹{Number(paper.base_price).toFixed(2)}/copy</div>
+                                                        <div className="text-xs text-slate-400">â‚¹{Number(paper.base_price).toFixed(2)}/copy</div>
                                                     </div>
                                                 </div>
                                             </td>
@@ -615,7 +615,7 @@ export default function Agency() {
                                                 <input type="number" min="0" value={s.returned || ''} onChange={e => handleStockInput(paper.id, 'returned', e.target.value)} placeholder="0" className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm" />
                                             </td>
                                             <td className="px-6 py-3.5 text-right"><span className={`font-bold text-lg ${sold > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{sold}</span></td>
-                                            <td className="px-6 py-3.5 text-right"><span className={`font-semibold text-lg ${income > 0 ? 'text-blue-600' : 'text-slate-400'}`}>₹{income.toFixed(2)}</span></td>
+                                            <td className="px-6 py-3.5 text-right"><span className={`font-semibold text-lg ${income > 0 ? 'text-blue-600' : 'text-slate-400'}`}>â‚¹{income.toFixed(2)}</span></td>
                                         </tr>
                                     );
                                 })}
@@ -623,14 +623,14 @@ export default function Agency() {
                             <tfoot>
                                 <tr className="bg-gradient-to-r from-blue-50 to-emerald-50 border-t-2 border-blue-200">
                                     <td colSpan="4" className="px-6 py-4 text-right"><span className="text-lg font-bold text-slate-700">Total Income:</span></td>
-                                    <td className="px-6 py-4 text-right"><span className="text-2xl font-bold text-emerald-600">₹{stockTotalIncome.toFixed(2)}</span></td>
+                                    <td className="px-6 py-4 text-right"><span className="text-2xl font-bold text-emerald-600">â‚¹{stockTotalIncome.toFixed(2)}</span></td>
                                 </tr>
                             </tfoot>
                         </table>
                     )
                 )}
 
-                {/* ── WORKERS ── */}
+                {/* â”€â”€ WORKERS â”€â”€ */}
                 {activeTab === 'workers' && (
                     <div>
                         {/* Worker sub-tabs */}
@@ -717,7 +717,7 @@ export default function Agency() {
                                                     </div>
                                                     <div className="bg-amber-50 rounded-lg p-2.5 border border-amber-200">
                                                         <p className="text-xs text-amber-600">Amount Given</p>
-                                                        <p className="font-bold text-amber-700 mt-0.5 text-xl">₹{(s?.total_amount_given ?? 0).toFixed(0)}</p>
+                                                        <p className="font-bold text-amber-700 mt-0.5 text-xl">â‚¹{(s?.total_amount_given ?? 0).toFixed(0)}</p>
                                                     </div>
                                                 </div>
                                             </div>
@@ -746,7 +746,7 @@ export default function Agency() {
                                                 <th className="text-center px-3 py-3 font-semibold text-slate-600">Taken</th>
                                                 <th className="text-center px-3 py-3 font-semibold text-slate-600">Returned</th>
                                                 <th className="text-center px-3 py-3 font-semibold text-emerald-700">Sold</th>
-                                                <th className="text-center px-3 py-3 font-semibold text-amber-700">Amount Given (₹)</th>
+                                                <th className="text-center px-3 py-3 font-semibold text-amber-700">Amount Given (â‚¹)</th>
                                                 <th className="w-20"></th>
                                             </tr>
                                         </thead>
@@ -800,418 +800,6 @@ export default function Agency() {
                         )}
                     </div>
                 )}
-            </div>
-        </div>
-    );
-}
-            {/* Header */}
-            <div className="flex justify-between items-end">
-                <div>
-                    <h1 className="text-3xl font-bold text-slate-800 tracking-tight">Agency Overview</h1>
-                    <p className="text-slate-500 mt-2">Manage your customers and subscriptions</p>
-                </div>
-                <button onClick={loadData} className="flex items-center gap-2 text-slate-500 hover:text-slate-700 transition-colors text-sm font-medium">
-                    <RefreshCw className="w-4 h-4" /> Refresh
-                </button>
-            </div>
-
-            {/* Summary Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                {tabs.map((tab) => {
-                    const c = colorMap[tab.color];
-                    const isActive = activeTab === tab.id;
-                    return (
-                        <button
-                            key={tab.id}
-                            onClick={() => { setActiveTab(tab.id); setSearch(''); setShowForm(false); setEditId(null); }}
-                            className={`bg-white rounded-2xl shadow-sm border-2 p-5 text-left transition-all ${
-                                isActive ? `${c.activeBorder} shadow-md` : 'border-slate-200 hover:border-slate-300'
-                            }`}
-                        >
-                            <div className="flex items-center justify-between mb-3">
-                                <div className={`p-2.5 rounded-xl ${c.bg} ${c.text}`}>
-                                    <tab.icon className="w-5 h-5" />
-                                </div>
-                                {isActive && <span className="text-xs font-medium text-slate-400 uppercase tracking-wider">Active</span>}
-                            </div>
-                            <h3 className="text-2xl font-bold text-slate-800">{tab.count}</h3>
-                            <p className="text-sm text-slate-500 mt-1">{tab.label}</p>
-                            {tab.subtitle && <p className="text-xs text-slate-400 mt-0.5">{tab.subtitle}</p>}
-                        </button>
-                    );
-                })}
-            </div>
-
-            {/* Sub Menu Bar */}
-            <div className="bg-white rounded-2xl shadow-sm border border-slate-200">
-                {/* Tab Bar */}
-                <div className="flex items-center justify-between border-b border-slate-200 px-2">
-                    <div className="flex">
-                        {tabs.map((tab) => {
-                            const isActive = activeTab === tab.id;
-                            const c = colorMap[tab.color];
-                            return (
-                                <button
-                                    key={tab.id}
-                                    onClick={() => { setActiveTab(tab.id); setSearch(''); setShowForm(false); setEditId(null); }}
-                                    className={`flex items-center gap-2 px-5 py-3.5 text-sm font-medium transition-colors border-b-2 -mb-px ${
-                                        isActive
-                                            ? `${c.activeBorder} ${c.text}`
-                                            : 'border-transparent text-slate-500 hover:text-slate-700'
-                                    }`}
-                                >
-                                    <tab.icon className="w-4 h-4" />
-                                    {tab.label}
-                                    <span className={`ml-1 px-1.5 py-0.5 rounded-full text-xs ${
-                                        isActive ? `${c.bg} ${c.text}` : 'bg-slate-100 text-slate-500'
-                                    }`}>{tab.count}</span>
-                                </button>
-                            );
-                        })}
-                    </div>
-                    <div className="flex items-center gap-2 pr-2">
-                        {activeTab === 'stock' ? (
-                            <>
-                                <div className="relative">
-                                    <Calendar className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                                    <input
-                                        type="date"
-                                        value={stockDate}
-                                        onChange={e => setStockDate(e.target.value)}
-                                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                                    />
-                                </div>
-                                <button
-                                    onClick={saveStock}
-                                    disabled={stockSaving || stockLoading}
-                                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium bg-blue-600 text-white hover:bg-blue-700 transition-colors disabled:opacity-60"
-                                >
-                                    {stockSaving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Save className="w-3.5 h-3.5" />}
-                                    Save
-                                </button>
-                            </>
-                        ) : (
-                            <>
-                                <div className="relative">
-                                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-400" />
-                                    <input
-                                        value={search}
-                                        onChange={e => setSearch(e.target.value)}
-                                        placeholder="Search..."
-                                        className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-blue-500 outline-none w-44"
-                                    />
-                                </div>
-                                <button
-                                    onClick={() => { setShowForm(!showForm); setEditId(null); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                        showForm
-                                            ? 'bg-slate-200 text-slate-700'
-                                            : `${currentColor.tabBg} text-white hover:opacity-90`
-                                    }`}
-                                >
-                                    {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                                    {showForm ? 'Cancel' : 'Add'}
-                                </button>
-                            </>
-                        )}
-                    </div>
-                </div>
-
-                {/* Inline Add Form */}
-                {showForm && (
-                    <div className="border-b border-slate-200 bg-slate-50 px-6 py-4">
-                        {activeTab === 'customers' && (
-                            <form onSubmit={addCustomer} className="flex items-end gap-4">
-                                <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Full Name</label>
-                                    <input value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} required placeholder="Customer name" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
-                                    <input value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} placeholder="Phone number" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
-                                </div>
-                                <div className="flex-1">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Address</label>
-                                    <input value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} placeholder="Address" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none" />
-                                </div>
-                                <button type="submit" disabled={submitting} className="bg-emerald-600 hover:bg-emerald-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Add Customer'}
-                                </button>
-                            </form>
-                        )}
-                        {activeTab === 'subscriptions' && (
-                            <form onSubmit={addSubscription} className="flex items-end gap-3 flex-wrap">
-                                <div className="flex-1 min-w-[140px]">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Customer</label>
-                                    <select value={subForm.customer_id} onChange={e => setSubForm({ ...subForm, customer_id: e.target.value })} required className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
-                                        <option value="">Select...</option>
-                                        {customers.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-                                    </select>
-                                </div>
-                                <div className="flex-1 min-w-[140px]">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Newspaper</label>
-                                    <select value={subForm.newspaper_id} onChange={e => setSubForm({ ...subForm, newspaper_id: e.target.value })} required className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
-                                        <option value="">Select...</option>
-                                        {newspapers.map(n => <option key={n.id} value={n.id}>{n.name} (₹{Number(n.base_price).toFixed(2)})</option>)}
-                                    </select>
-                                </div>
-                                <div className="w-24">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Type</label>
-                                    <select value={subForm.subscription_type} onChange={e => setSubForm({ ...subForm, subscription_type: e.target.value })} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none">
-                                        <option value="daily">Daily</option>
-                                        <option value="weekly">Weekly</option>
-                                        <option value="monthly">Monthly</option>
-                                        <option value="yearly">Yearly</option>
-                                    </select>
-                                </div>
-                                <div className="w-20">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Qty</label>
-                                    <input type="number" min="1" value={subForm.quantity} onChange={e => setSubForm({ ...subForm, quantity: e.target.value })} className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" />
-                                </div>
-                                <div className="w-28">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Price</label>
-                                    <input type="number" step="0.01" value={subForm.price} onChange={e => setSubForm({ ...subForm, price: e.target.value })} placeholder="Base" className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-amber-500 outline-none" />
-                                </div>
-                                <button type="submit" disabled={submitting} className="bg-amber-600 hover:bg-amber-700 text-white px-5 py-2 rounded-lg text-sm font-medium transition-colors disabled:opacity-60">
-                                    {submitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Create'}
-                                </button>
-                            </form>
-                        )}
-                    </div>
-                )}
-
-                {/* Table Content */}
-                <div>
-                    {activeTab === 'customers' && (
-                        filteredCustomers.length === 0 ? (
-                            <div className="p-12 text-center">
-                                <Users className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">No customers found</p>
-                                <p className="text-slate-400 text-sm mt-1">Click "Add" to register a new customer</p>
-                            </div>
-                        ) : (
-                            <table className="w-full text-left">
-                                <thead>
-                                    <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Name</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Phone</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600">Address</th>
-                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-slate-100">
-                                    {filteredCustomers.map((customer) => (
-                                        <tr key={customer.id} className="hover:bg-slate-50 transition-colors">
-                                            <td className="px-6 py-3.5 flex items-center gap-3">
-                                                <div className="p-2 bg-emerald-100 rounded-lg">
-                                                    <Users className="w-4 h-4 text-emerald-600" />
-                                                </div>
-                                                {editId === customer.id ? (
-                                                    <input value={editData.name} onChange={e => setEditData({ ...editData, name: e.target.value })} className="border border-emerald-300 rounded-lg px-2 py-1 text-sm w-36" />
-                                                ) : (
-                                                    <span className="font-medium text-slate-800">{customer.name}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-3.5 text-slate-600">
-                                                {editId === customer.id ? (
-                                                    <input value={editData.phone} onChange={e => setEditData({ ...editData, phone: e.target.value })} className="border border-emerald-300 rounded-lg px-2 py-1 text-sm w-32" />
-                                                ) : (customer.phone || '-')}
-                                            </td>
-                                            <td className="px-6 py-3.5 text-slate-500">
-                                                {editId === customer.id ? (
-                                                    <input value={editData.address} onChange={e => setEditData({ ...editData, address: e.target.value })} className="border border-emerald-300 rounded-lg px-2 py-1 text-sm w-44" />
-                                                ) : (
-                                                    <span className="max-w-xs truncate block">{customer.address || '-'}</span>
-                                                )}
-                                            </td>
-                                            <td className="px-6 py-3.5 text-right">
-                                                {editId === customer.id ? (
-                                                    <div className="flex items-center justify-end gap-2">
-                                                        <button onClick={saveEditCustomer} className="text-xs bg-emerald-600 text-white px-3 py-1 rounded-lg hover:bg-emerald-700">Save</button>
-                                                        <button onClick={() => setEditId(null)} className="text-slate-400 hover:text-slate-600"><X className="w-4 h-4" /></button>
-                                                    </div>
-                                                ) : (
-                                                    <div className="flex items-center justify-end gap-1">
-                                                        <button onClick={() => startEditCustomer(customer)} className="p-1.5 hover:bg-emerald-50 rounded-lg text-emerald-600"><Pencil className="w-4 h-4" /></button>
-                                                        <button onClick={() => deleteCustomer(customer.id, customer.name)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                                    </div>
-                                                )}
-                                            </td>
-                                        </tr>
-                                    ))}
-                                </tbody>
-                            </table>
-                        )
-                    )}
-
-                    {activeTab === 'subscriptions' && (
-                        filteredSubs.length === 0 ? (
-                            <div className="p-12 text-center">
-                                <BookOpen className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">No subscriptions found</p>
-                                <p className="text-slate-400 text-sm mt-1">Click "Add" to create a subscription</p>
-                            </div>
-                        ) : (
-                            <>
-                                {/* Billing info banner */}
-                                <div className="mx-6 mt-4 mb-2 p-3 bg-blue-50 border border-blue-200 rounded-xl text-xs text-blue-700 flex items-start gap-2">
-                                    <span className="mt-0.5 shrink-0">ℹ️</span>
-                                    <div>
-                                        <span className="font-semibold">Billing model: </span>
-                                        Monthly = (price × qty × days) + service charge &nbsp;|&nbsp; Yearly = (price × qty × days), no service charge
-                                    </div>
-                                </div>
-                                <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                            <th className="px-6 py-3 font-semibold text-slate-600">Customer</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Type</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Qty</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Price/day</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Est. Monthly</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-center">Status</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {filteredSubs.map((sub) => {
-                                            const paper = newspapers.find(n => n.id === sub.newspaper_id);
-                                            const dailyPrice = sub.price ? Number(sub.price) : (paper ? Number(paper.base_price) : 0);
-                                            const estMonthly = dailyPrice * sub.quantity * 30;
-                                            const isYearly = sub.subscription_type === 'yearly';
-                                            return (
-                                                <tr key={sub.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="px-6 py-3.5 flex items-center gap-3">
-                                                        <div className="p-2 bg-amber-100 rounded-lg">
-                                                            <BookOpen className="w-4 h-4 text-amber-600" />
-                                                        </div>
-                                                        <span className="font-medium text-slate-800">{sub.customer_name || '-'}</span>
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-slate-600">{sub.newspaper_name || '-'}</td>
-                                                    <td className="px-6 py-3.5 text-center">
-                                                        <div className="flex flex-col items-center gap-1">
-                                                            <span className={`inline-block px-2 py-0.5 rounded-full text-xs font-medium ${
-                                                                sub.subscription_type === 'daily' ? 'bg-blue-100 text-blue-700' :
-                                                                sub.subscription_type === 'weekly' ? 'bg-purple-100 text-purple-700' :
-                                                                sub.subscription_type === 'monthly' ? 'bg-amber-100 text-amber-700' :
-                                                                'bg-green-100 text-green-700'
-                                                            }`}>{sub.subscription_type || 'daily'}</span>
-                                                            {isYearly && <span className="text-[10px] text-green-600 font-medium">No service charge</span>}
-                                                            {sub.subscription_type === 'monthly' && <span className="text-[10px] text-amber-600 font-medium">+ service charge</span>}
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-center text-slate-700 font-medium">{sub.quantity}</td>
-                                                    <td className="px-6 py-3.5 text-right text-slate-700">₹{dailyPrice.toFixed(2)}</td>
-                                                    <td className="px-6 py-3.5 text-right">
-                                                        <span className="font-semibold text-slate-800">₹{estMonthly.toFixed(0)}</span>
-                                                        <span className="text-[10px] text-slate-400 block">/month est.</span>
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-center">
-                                                        <button onClick={() => toggleSubStatus(sub)} className={`px-2.5 py-1 rounded-full text-xs font-semibold transition-colors ${
-                                                            sub.status === 1 ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200' : 'bg-slate-200 text-slate-500 hover:bg-slate-300'
-                                                        }`}>
-                                                            {sub.status === 1 ? 'Active' : 'Paused'}
-                                                        </button>
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-right">
-                                                        <button onClick={() => deleteSub(sub.id)} className="p-1.5 hover:bg-red-50 rounded-lg text-red-500"><Trash2 className="w-4 h-4" /></button>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                </table>
-                            </>
-                        )
-                    )}
-
-                    {activeTab === 'stock' && (
-                        stockLoading ? (
-                            <div className="flex items-center justify-center py-24">
-                                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-                            </div>
-                        ) : newspapers.length === 0 ? (
-                            <div className="p-12 text-center">
-                                <Package className="w-12 h-12 text-slate-300 mx-auto mb-3" />
-                                <p className="text-slate-500 font-medium">No newspapers configured</p>
-                                <p className="text-slate-400 text-sm mt-1">Add newspapers first to manage stock</p>
-                            </div>
-                        ) : (
-                            <>
-                                <table className="w-full text-left">
-                                    <thead>
-                                        <tr className="bg-slate-50 border-b border-slate-200 text-sm">
-                                            <th className="px-6 py-3 font-semibold text-slate-600">Newspaper</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 w-44">Taken</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 w-44">Returned</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 w-28 text-right">Sold</th>
-                                            <th className="px-6 py-3 font-semibold text-slate-600 w-36 text-right">Income</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="divide-y divide-slate-100">
-                                        {newspapers.map(paper => {
-                                            const s = stock[paper.id] || { taken: 0, returned: 0 };
-                                            const sold = Math.max(0, (s.taken || 0) - (s.returned || 0));
-                                            const income = sold * Number(paper.base_price);
-                                            return (
-                                                <tr key={paper.id} className="hover:bg-slate-50 transition-colors">
-                                                    <td className="px-6 py-3.5">
-                                                        <div className="flex items-center gap-3">
-                                                            <div className="p-2 bg-blue-100 rounded-lg">
-                                                                <Package className="w-4 h-4 text-blue-600" />
-                                                            </div>
-                                                            <div>
-                                                                <span className="font-medium text-slate-800">{paper.name}</span>
-                                                                <div className="text-xs text-slate-400">₹{Number(paper.base_price).toFixed(2)}/copy</div>
-                                                            </div>
-                                                        </div>
-                                                    </td>
-                                                    <td className="px-6 py-3.5">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            value={s.taken || ''}
-                                                            onChange={e => handleStockInput(paper.id, 'taken', e.target.value)}
-                                                            placeholder="0"
-                                                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-3.5">
-                                                        <input
-                                                            type="number"
-                                                            min="0"
-                                                            value={s.returned || ''}
-                                                            onChange={e => handleStockInput(paper.id, 'returned', e.target.value)}
-                                                            placeholder="0"
-                                                            className="w-full p-2 border border-slate-200 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm"
-                                                        />
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-right">
-                                                        <span className={`font-bold text-lg ${sold > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{sold}</span>
-                                                    </td>
-                                                    <td className="px-6 py-3.5 text-right">
-                                                        <span className={`font-semibold text-lg ${income > 0 ? 'text-blue-600' : 'text-slate-400'}`}>₹{income.toFixed(2)}</span>
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })}
-                                    </tbody>
-                                    <tfoot>
-                                        <tr className="bg-gradient-to-r from-blue-50 to-emerald-50 border-t-2 border-blue-200">
-                                            <td colSpan="4" className="px-6 py-4 text-right">
-                                                <span className="text-lg font-bold text-slate-700">Total Income:</span>
-                                            </td>
-                                            <td className="px-6 py-4 text-right">
-                                                <span className="text-2xl font-bold text-emerald-600">₹{stockTotalIncome.toFixed(2)}</span>
-                                            </td>
-                                        </tr>
-                                    </tfoot>
-                                </table>
-                            </>
-                        )
-                    )}
-                </div>
             </div>
         </div>
     );
