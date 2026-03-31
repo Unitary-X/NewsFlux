@@ -7,6 +7,7 @@ from datetime import date, datetime
 class NewspaperBase(BaseModel):
     name: str
     base_price: float
+    paper_type: str = "daily"
 
 class NewspaperCreate(NewspaperBase):
     pass
@@ -14,6 +15,7 @@ class NewspaperCreate(NewspaperBase):
 class NewspaperUpdate(BaseModel):
     name: Optional[str] = None
     base_price: Optional[float] = None
+    paper_type: Optional[str] = None
 
 class NewspaperResponse(NewspaperBase):
     id: UUID
@@ -102,11 +104,15 @@ class PricingGridUpdate(BaseModel):
 # --- WORKERS ---
 class WorkerCreate(BaseModel):
     username: str
-    password: str
+    password: Optional[str] = None
+    role: str = "worker"
+    phone: Optional[str] = None
 
 class WorkerResponse(BaseModel):
     id: UUID
     username: str
+    role: str
+    phone: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class WorkerStockEntry(BaseModel):
@@ -116,3 +122,7 @@ class WorkerStockEntry(BaseModel):
     taken: int = 0
     returned: int = 0
     amount_given: float = 0.0
+
+class WorkerStockBulkUpdate(BaseModel):
+    date: date
+    entries: List[WorkerStockEntry]

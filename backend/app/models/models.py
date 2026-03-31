@@ -23,6 +23,7 @@ class User(Base):
     role = Column(String(20), nullable=False) # super_admin, admin, worker
     username = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
+    phone = Column(String(20), nullable=True)
 
 class Newspaper(Base):
     __tablename__ = "newspapers"
@@ -30,6 +31,7 @@ class Newspaper(Base):
     tenant_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
     name = Column(String(100), nullable=False)
     base_price = Column(DECIMAL(10, 2), nullable=False)
+    paper_type = Column(String(20), default="daily") # daily, monthly, yearly
 
 class Customer(Base):
     __tablename__ = "customers"

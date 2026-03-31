@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import api from '../../utils/api';
 import { Building2, Users, Newspaper, Activity, TrendingUp, TrendingDown, BarChart3, Trophy } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
+import { DashboardSkeleton } from '../../components/Skeleton';
 
 export default function SuperAdminDashboard() {
     const [analytics, setAnalytics] = useState(null);
@@ -32,13 +33,7 @@ export default function SuperAdminDashboard() {
         load();
     }, []);
 
-    if (isLoading) {
-        return (
-            <div className="flex-1 flex items-center justify-center min-h-screen">
-                <div className="text-indigo-400 font-mono text-sm tracking-widest animate-pulse">Loading telemetry...</div>
-            </div>
-        );
-    }
+    if (isLoading) return <div className="p-8 px-12"><DashboardSkeleton /></div>;
 
     // Calculate real trend percentages from trends data
     const calcTrend = (key) => {
@@ -93,18 +88,20 @@ export default function SuperAdminDashboard() {
                             <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 bg-indigo-500 rounded-sm"></span> New Agencies</span>
                         </div>
                     </div>
-                    <ResponsiveContainer width="100%" height={280}>
-                        <BarChart data={growth} barCategoryGap="20%">
-                            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                            <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
-                            <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
-                            <Tooltip
-                                contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', color: '#e2e8f0' }}
-                                cursor={{ fill: 'rgba(99,102,241,0.1)' }}
-                            />
-                            <Bar dataKey="count" name="Agencies" fill="#818cf8" radius={[6, 6, 0, 0]} />
-                        </BarChart>
-                    </ResponsiveContainer>
+                    <div className="h-[280px] w-full">
+                        <ResponsiveContainer width="100%" height="100%">
+                            <BarChart data={growth} barCategoryGap="20%">
+                                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                                <XAxis dataKey="month" tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} />
+                                <YAxis tick={{ fill: '#94a3b8', fontSize: 11 }} axisLine={false} tickLine={false} allowDecimals={false} />
+                                <Tooltip
+                                    contentStyle={{ backgroundColor: '#1e293b', border: '1px solid #334155', borderRadius: '12px', color: '#e2e8f0' }}
+                                    cursor={{ fill: 'rgba(99,102,241,0.1)' }}
+                                />
+                                <Bar dataKey="count" name="Agencies" fill="#818cf8" radius={[6, 6, 0, 0]} />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </div>
                 </div>
 
                 {/* Right column: System Activity + Invoice */}
@@ -116,13 +113,15 @@ export default function SuperAdminDashboard() {
                         </h3>
                         <div className="flex items-center justify-center">
                             <div className="relative">
-                                <ResponsiveContainer width={160} height={160}>
-                                    <PieChart>
-                                        <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value" strokeWidth={0}>
-                                            {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
-                                        </Pie>
-                                    </PieChart>
-                                </ResponsiveContainer>
+                                <div className="h-[160px] w-[160px]">
+                                    <ResponsiveContainer width="100%" height="100%">
+                                        <PieChart>
+                                            <Pie data={pieData} cx="50%" cy="50%" innerRadius={50} outerRadius={70} dataKey="value" strokeWidth={0}>
+                                                {pieData.map((_, i) => <Cell key={i} fill={PIE_COLORS[i]} />)}
+                                            </Pie>
+                                        </PieChart>
+                                    </ResponsiveContainer>
+                                </div>
                                 <div className="absolute inset-0 flex flex-col items-center justify-center">
                                     <span className="text-2xl font-black text-white">
                                         {analytics?.total_agencies ? Math.round((analytics.active_agencies / analytics.total_agencies) * 100) : 0}%

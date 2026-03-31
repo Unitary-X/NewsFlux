@@ -81,7 +81,9 @@ export default function Agencies() {
     const handleImpersonate = async (agencyId) => {
         try {
             const res = await api.post(`/superadmin/impersonate/${agencyId}`);
-            impersonate(res.data.access_token, res.data.agency_name);
+            // The impersonate function expects: (token, refreshToken, agencyName)
+            // Backend returns: { access_token, refresh_token, agency_name, agency_id }
+            impersonate(res.data.access_token, res.data.refresh_token || null, res.data.agency_name);
         } catch (err) {
             alert(err.response?.data?.detail || 'Impersonation failed');
         }

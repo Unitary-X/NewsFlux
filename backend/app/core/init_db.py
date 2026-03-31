@@ -15,8 +15,8 @@ def init_db() -> None:
         user = db.query(User).filter(User.username == "superadmin").first()
         if not user:
             logger.info("Initializing baseline Super Admin account...")
-            # Get password from environment variable or generate secure random one
-            initial_password = os.getenv("INITIAL_SUPERADMIN_PASSWORD", secrets.token_urlsafe(16))
+            # Get password from environment variable or use 'admin123' as default (per README)
+            initial_password = os.getenv("INITIAL_SUPERADMIN_PASSWORD", "admin123")
             super_user = User(
                 username="superadmin",
                 password_hash=get_password_hash(initial_password),

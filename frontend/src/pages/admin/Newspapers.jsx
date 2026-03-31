@@ -40,7 +40,10 @@ export default function Newspapers() {
     const onSubmit = async (data) => {
         setIsAdding(true);
         try {
-            await api.post('/admin/newspapers', { name: data.name, base_price: parseFloat(data.base_price) });
+            await api.post('/admin/newspapers', { 
+                name: data.name, 
+                base_price: parseFloat(data.base_price)
+            });
             reset();
             fetchNewspapers();
         } catch (err) {
@@ -59,7 +62,7 @@ export default function Newspapers() {
         try {
             await api.put(`/admin/newspapers/${editId}`, {
                 name: editData.name,
-                base_price: parseFloat(editData.base_price),
+                base_price: parseFloat(editData.base_price)
             });
             setEditId(null);
             fetchNewspapers();

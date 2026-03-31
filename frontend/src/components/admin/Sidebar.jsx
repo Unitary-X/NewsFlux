@@ -1,10 +1,10 @@
 import React from 'react';
 import { NavLink } from 'react-router-dom';
-import { LayoutDashboard, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, Receipt, HardDrive, BarChart3, IndianRupee, Building2 } from 'lucide-react';
+import { LayoutDashboard, Newspaper, FileSpreadsheet, LogOut, Settings, Globe, Receipt, HardDrive, BarChart3, IndianRupee, Building2, X } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useTranslation } from 'react-i18next';
 
-export default function Sidebar() {
+export default function Sidebar({ isOpen, setIsOpen }) {
     const { logout, user } = useAuth();
     const { t, i18n } = useTranslation();
 
@@ -24,12 +24,18 @@ export default function Sidebar() {
     ];
 
     return (
-        <div className="w-64 bg-slate-900 border-r border-slate-800 h-screen flex flex-col text-slate-300">
-            <div className="h-16 flex items-center px-6 border-b border-slate-800">
+        <div className={`fixed inset-y-0 left-0 z-[50] w-64 bg-slate-900 border-r border-slate-800 flex flex-col text-slate-300 transform transition-transform duration-300 lg:relative lg:translate-x-0 ${isOpen ? 'translate-x-0' : '-translate-x-full'}`}>
+            <div className="h-16 flex items-center justify-between px-6 border-b border-slate-800">
                 <h1 className="text-xl font-bold tracking-tight text-white flex items-center gap-2">
                     <Newspaper className="w-6 h-6 text-blue-500" />
                     NewsFlux
                 </h1>
+                <button 
+                    onClick={() => setIsOpen(false)}
+                    className="p-1 lg:hidden text-slate-400 hover:text-white transition-colors"
+                >
+                    <X className="w-5 h-5" />
+                </button>
             </div>
 
             <div className="p-4 flex-1">
@@ -40,6 +46,7 @@ export default function Sidebar() {
                             key={link.to}
                             to={link.to}
                             end={link.end || false}
+                            onClick={() => setIsOpen(false)}
                             className={({ isActive }) =>
                                 `flex items-center gap-3 px-3 py-2 rounded-lg transition-colors font-medium text-sm ${isActive ? 'bg-blue-600/10 text-blue-400' : 'hover:bg-slate-800 hover:text-white'
                                 }`

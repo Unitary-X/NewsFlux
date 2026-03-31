@@ -3,7 +3,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import api from '../../utils/api';
 import { useTranslation } from 'react-i18next';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
-import { Newspaper, Users, IndianRupee, TrendingUp, Package, FileText, Loader2 } from 'lucide-react';
+import { Newspaper, Users, IndianRupee, TrendingUp, Loader2 } from 'lucide-react';
+import { DashboardSkeleton } from '../../components/Skeleton';
 
 function KPICard({ title, value, icon: Icon, color, sub }) {
     const colors = {
@@ -60,11 +61,7 @@ export default function AdminDashboard() {
     }, []);
 
     if (loading) {
-        return (
-            <div className="flex items-center justify-center h-96">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-500" />
-            </div>
-        );
+        return <div className="p-8"><DashboardSkeleton /></div>;
     }
 
     const s = stats || {};
@@ -81,7 +78,7 @@ export default function AdminDashboard() {
                 <KPICard title={t('admin.newspapers_kpi')} value={s.total_newspapers} icon={Newspaper} color="blue" />
                 <KPICard title={t('admin.customers_kpi')} value={s.total_customers} icon={Users} color="emerald" />
                 <KPICard title={t('admin.revenue_kpi')} value={`₹${s.today_revenue?.toLocaleString() || 0}`} icon={IndianRupee} color="amber" sub={`${t('stock.sold')}: ${s.today_sold || 0}`} />
-                <KPICard title={t('admin.monthly_revenue')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`${t('billing.pending_amount')}: ${s.pending_invoices || 0}`} />
+                <KPICard title={t('admin.monthly_revenue')} value={`₹${s.monthly_revenue?.toLocaleString() || 0}`} icon={TrendingUp} color="violet" sub={`${t('billing.total_invoices')}: ${s.pending_invoices || 0}`} />
             </div>
 
             {/* Charts Row */}
@@ -90,21 +87,23 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                     <h2 className="text-lg font-bold text-slate-800 mb-4">{t('admin.revenue_trend')}</h2>
                     {revenueData.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={280}>
-                            <AreaChart data={revenueData}>
-                                <defs>
-                                    <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
-                                        <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
-                                        <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                                    </linearGradient>
-                                </defs>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                                <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                                <Tooltip formatter={(v) => [`₹${v}`, t('admin.daily_revenue')]} />
-                                <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revGrad)" strokeWidth={2} />
-                            </AreaChart>
-                        </ResponsiveContainer>
+                        <div className="h-[280px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={revenueData}>
+                                    <defs>
+                                        <linearGradient id="revGrad" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                                            <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="date" tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                                    <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                                    <Tooltip formatter={(v) => [`₹${v}`, t('admin.daily_revenue')]} />
+                                    <Area type="monotone" dataKey="revenue" stroke="#3b82f6" fill="url(#revGrad)" strokeWidth={2} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
                     ) : (
                         <div className="h-64 flex items-center justify-center text-slate-400">{t('common.no_data')}</div>
                     )}
@@ -114,17 +113,19 @@ export default function AdminDashboard() {
                 <div className="bg-white rounded-2xl shadow-sm border border-slate-200 p-6">
                     <h2 className="text-lg font-bold text-slate-800 mb-4">{t('admin.stock_summary')}</h2>
                     {stockSummary.length > 0 ? (
-                        <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={stockSummary}>
-                                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                                <XAxis dataKey="newspaper_name" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                                <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
-                                <Tooltip />
-                                <Bar dataKey="taken" fill="#3b82f6" name={t('stock.taken')} radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="returned" fill="#f59e0b" name={t('stock.returned')} radius={[4, 4, 0, 0]} />
-                                <Bar dataKey="sold" fill="#10b981" name={t('stock.sold')} radius={[4, 4, 0, 0]} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                        <div className="h-[280px] w-full">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={stockSummary}>
+                                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                                    <XAxis dataKey="newspaper_name" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                                    <YAxis tick={{ fontSize: 12 }} stroke="#94a3b8" />
+                                    <Tooltip />
+                                    <Bar dataKey="taken" fill="#3b82f6" name={t('stock.taken')} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="returned" fill="#f59e0b" name={t('stock.returned')} radius={[4, 4, 0, 0]} />
+                                    <Bar dataKey="sold" fill="#10b981" name={t('stock.sold')} radius={[4, 4, 0, 0]} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
                     ) : (
                         <div className="h-64 flex items-center justify-center text-slate-400">{t('stock.no_data')}</div>
                     )}

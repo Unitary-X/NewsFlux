@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Users, BookOpen, Package, Plus, Search, Loader2, RefreshCw, Trash2, X, Pencil, Save, Calendar, IndianRupee, TrendingUp } from 'lucide-react';
 import api from '../../utils/api';
 
@@ -236,7 +236,6 @@ export default function Agency() {
     const tabs = [
         { id: 'customers', label: 'Customers', icon: Users, count: customers.length, color: 'emerald', subtitle: null },
         { id: 'subscriptions', label: 'Subscriptions', icon: BookOpen, count: `${activeSubs.length}/${subscriptions.length}`, color: 'amber', subtitle: `Est. â‚¹${totalEstMonthly.toFixed(0)}/mo` },
-        { id: 'stock', label: 'Daily Stock', icon: Package, count: newspapers.length, color: 'blue', subtitle: stockTotalIncome > 0 ? `â‚¹${stockTotalIncome.toFixed(0)} today` : null },
         { id: 'workers', label: 'Workers', icon: Users, count: workers.length, color: 'indigo', subtitle: null },
     ];
 
@@ -633,28 +632,8 @@ export default function Agency() {
                 {/* â”€â”€ WORKERS â”€â”€ */}
                 {activeTab === 'workers' && (
                     <div>
-                        {/* Worker sub-tabs */}
-                        <div className="flex items-center gap-1 px-4 pt-3 pb-0 border-b border-slate-100">
-                            <button
-                                onClick={() => { setWorkerSubTab('list'); setShowForm(false); }}
-                                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                                    workerSubTab === 'list' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-700'
-                                }`}
-                            >
-                                Worker List
-                            </button>
-                            <button
-                                onClick={() => { setWorkerSubTab('ledger'); setShowForm(false); loadLedger(); }}
-                                className={`px-4 py-2 text-sm font-medium rounded-t-lg transition-colors ${
-                                    workerSubTab === 'ledger' ? 'bg-indigo-50 text-indigo-700 border-b-2 border-indigo-500' : 'text-slate-500 hover:text-slate-700'
-                                }`}
-                            >
-                                Daily Ledger
-                            </button>
-                        </div>
-
                         {/* Add worker form */}
-                        {workerSubTab === 'list' && showForm && (
+                        {showForm && (
                             <form onSubmit={addWorker} className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex items-end gap-4 flex-wrap">
                                 <div className="flex-1 min-w-40">
                                     <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
@@ -674,129 +653,41 @@ export default function Agency() {
                         )}
 
                         {/* Worker list */}
-                        {workerSubTab === 'list' && (
-                            workers.length === 0 ? (
-                                <div className="text-center py-16 text-slate-400">
-                                    <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                                    <p className="font-medium">No workers yet</p>
-                                    <p className="text-sm mt-1">Click "Add Worker" to create the first delivery worker</p>
-                                </div>
-                            ) : (
-                                <div className="p-4 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                    {workers.map(w => {
-                                        const s = workerSummaries[w.id];
-                                        return (
-                                            <div key={w.id} className="bg-slate-50 rounded-xl border border-slate-200 p-4 flex flex-col gap-3">
-                                                <div className="flex items-center justify-between">
-                                                    <div className="flex items-center gap-2.5">
-                                                        <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-base uppercase flex-shrink-0">
-                                                            {w.username[0]}
-                                                        </div>
-                                                        <div>
-                                                            <p className="font-semibold text-slate-800 text-sm">{w.username}</p>
-                                                            <p className="text-xs text-slate-400">Delivery Worker</p>
-                                                        </div>
-                                                    </div>
-                                                    <button onClick={() => deleteWorker(w.id, w.username)} title="Delete worker"
-                                                        className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
-                                                        <Trash2 className="w-4 h-4" />
-                                                    </button>
+                        {workers.length === 0 ? (
+                            <div className="text-center py-16 text-slate-400">
+                                <Users className="w-12 h-12 mx-auto mb-4 opacity-30" />
+                                <p className="font-medium">No workers yet</p>
+                                <p className="text-sm mt-1">Click "Add Worker" to create the first delivery worker</p>
+                            </div>
+                        ) : (
+                            <table className="w-full text-left">
+                                <thead>
+                                    <tr className="bg-slate-50 border-b border-slate-200 text-sm">
+                                        <th className="px-6 py-3 font-semibold text-slate-600">Worker</th>
+                                        <th className="px-6 py-3 font-semibold text-slate-600">Role</th>
+                                        <th className="px-6 py-3 font-semibold text-slate-600 text-right">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {workers.map(w => (
+                                        <tr key={w.id} className="hover:bg-slate-50 transition-colors">
+                                            <td className="px-6 py-3.5 flex items-center gap-3">
+                                                <div className="w-9 h-9 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-base uppercase flex-shrink-0">
+                                                    {w.username[0]}
                                                 </div>
-                                                <div className="grid grid-cols-2 gap-2">
-                                                    <div className="bg-white rounded-lg p-2.5 border border-slate-200">
-                                                        <p className="text-xs text-slate-400">Papers Taken</p>
-                                                        <p className="font-bold text-slate-700 mt-0.5 text-xl">{s?.total_taken ?? 0}</p>
-                                                    </div>
-                                                    <div className="bg-white rounded-lg p-2.5 border border-slate-200">
-                                                        <p className="text-xs text-slate-400">Returned</p>
-                                                        <p className="font-bold text-slate-700 mt-0.5 text-xl">{s?.total_returned ?? 0}</p>
-                                                    </div>
-                                                    <div className="bg-emerald-50 rounded-lg p-2.5 border border-emerald-200">
-                                                        <p className="text-xs text-emerald-600">Sold</p>
-                                                        <p className="font-bold text-emerald-700 mt-0.5 text-xl">{s?.total_sold ?? 0}</p>
-                                                    </div>
-                                                    <div className="bg-amber-50 rounded-lg p-2.5 border border-amber-200">
-                                                        <p className="text-xs text-amber-600">Amount Given</p>
-                                                        <p className="font-bold text-amber-700 mt-0.5 text-xl">â‚¹{(s?.total_amount_given ?? 0).toFixed(0)}</p>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        );
-                                    })}
-                                </div>
-                            )
-                        )}
-
-                        {/* Daily ledger */}
-                        {workerSubTab === 'ledger' && (
-                            ledgerLoading ? (
-                                <div className="flex justify-center py-16"><Loader2 className="w-6 h-6 animate-spin text-indigo-500" /></div>
-                            ) : workers.length === 0 || newspapers.length === 0 ? (
-                                <div className="text-center py-16 text-slate-400">
-                                    <Package className="w-12 h-12 mx-auto mb-4 opacity-30" />
-                                    <p className="font-medium">{workers.length === 0 ? 'No workers yet' : 'No newspapers configured'}</p>
-                                </div>
-                            ) : (
-                                <div className="overflow-x-auto">
-                                    <table className="w-full text-sm">
-                                        <thead>
-                                            <tr className="bg-slate-50 border-b border-slate-200">
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Worker</th>
-                                                <th className="text-left px-4 py-3 font-semibold text-slate-600">Newspaper</th>
-                                                <th className="text-center px-3 py-3 font-semibold text-slate-600">Taken</th>
-                                                <th className="text-center px-3 py-3 font-semibold text-slate-600">Returned</th>
-                                                <th className="text-center px-3 py-3 font-semibold text-emerald-700">Sold</th>
-                                                <th className="text-center px-3 py-3 font-semibold text-amber-700">Amount Given (â‚¹)</th>
-                                                <th className="w-20"></th>
-                                            </tr>
-                                        </thead>
-                                        <tbody className="divide-y divide-slate-100">
-                                            {workers.flatMap(w =>
-                                                newspapers.map(p => {
-                                                    const key = `${w.id}_${p.id}`;
-                                                    const entry = ledgerEntries[key] || { taken: 0, returned: 0, amount_given: 0, sold: 0 };
-                                                    const sold = Math.max(0, (entry.taken || 0) - (entry.returned || 0));
-                                                    return (
-                                                        <tr key={key} className="hover:bg-slate-50 transition-colors">
-                                                            <td className="px-4 py-2.5">
-                                                                <div className="flex items-center gap-2">
-                                                                    <div className="w-7 h-7 rounded-full bg-indigo-100 text-indigo-700 flex items-center justify-center font-bold text-xs uppercase flex-shrink-0">{w.username[0]}</div>
-                                                                    <span className="font-medium text-slate-700">{w.username}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-2.5 text-slate-600 font-medium">{p.name}</td>
-                                                            <td className="px-3 py-2.5">
-                                                                <input type="number" min="0" value={entry.taken || 0}
-                                                                    onChange={e => updateLedgerField(w.id, p.id, 'taken', e.target.value)}
-                                                                    className="w-20 text-center bg-white border border-slate-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-blue-400 outline-none block mx-auto" />
-                                                            </td>
-                                                            <td className="px-3 py-2.5">
-                                                                <input type="number" min="0" value={entry.returned || 0}
-                                                                    onChange={e => updateLedgerField(w.id, p.id, 'returned', e.target.value)}
-                                                                    className="w-20 text-center bg-white border border-orange-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-orange-400 outline-none block mx-auto" />
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-center">
-                                                                <span className={`text-base font-bold ${sold > 0 ? 'text-emerald-600' : 'text-slate-400'}`}>{sold}</span>
-                                                            </td>
-                                                            <td className="px-3 py-2.5">
-                                                                <input type="number" min="0" step="0.01" value={entry.amount_given || 0}
-                                                                    onChange={e => updateLedgerField(w.id, p.id, 'amount_given', e.target.value)}
-                                                                    className="w-24 text-center bg-white border border-amber-200 rounded-lg px-2 py-1 focus:ring-2 focus:ring-amber-400 outline-none block mx-auto" />
-                                                            </td>
-                                                            <td className="px-3 py-2.5 text-center">
-                                                                <button onClick={() => saveLedgerRow(w.id, p.id)} disabled={savingRows[key]}
-                                                                    className="inline-flex items-center gap-1 px-3 py-1 bg-indigo-600 text-white rounded-lg text-xs font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60">
-                                                                    {savingRows[key] ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />} Save
-                                                                </button>
-                                                            </td>
-                                                        </tr>
-                                                    );
-                                                })
-                                            )}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            )
+                                                <span className="font-medium text-slate-800">{w.username}</span>
+                                            </td>
+                                            <td className="px-6 py-3.5 text-slate-500 text-sm">Delivery Worker</td>
+                                            <td className="px-6 py-3.5 text-right">
+                                                <button onClick={() => deleteWorker(w.id, w.username)} title="Delete worker"
+                                                    className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors">
+                                                    <Trash2 className="w-4 h-4" />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
                         )}
                     </div>
                 )}

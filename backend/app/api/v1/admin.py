@@ -20,7 +20,7 @@ from app.schemas.admin import (
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     InvoiceResponse, GenerateBillsRequest,
     PricingGridUpdate,
-    WorkerCreate, WorkerStockEntry,
+    WorkerCreate, WorkerResponse, WorkerStockEntry,
 )
 from app.core.security import get_password_hash
 
@@ -163,6 +163,7 @@ def stock_summary(request: Request, target_date: str = None, db: Session = Depen
         result.append({
             "newspaper_id": str(s.newspaper_id),
             "newspaper_name": paper.name if paper else "Unknown",
+            "paper_type": paper.paper_type if paper else "daily",
             "base_price": float(paper.base_price) if paper else 0,
             "taken": s.taken or 0,
             "returned": s.returned or 0,
@@ -183,6 +184,7 @@ def create_newspaper(request: Request, newspaper: NewspaperCreate, db: Session =
     new_paper = Newspaper(
         name=newspaper.name,
         base_price=newspaper.base_price,
+        paper_type=newspaper.paper_type,
         tenant_id=tenant_id
     )
     db.add(new_paper)
@@ -215,6 +217,9 @@ def update_newspaper(request: Request, newspaper_id: str, data: NewspaperUpdate,
     if data.base_price is not None:
         changes["base_price"] = {"old": str(paper.base_price), "new": str(data.base_price)}
         paper.base_price = data.base_price
+    if data.paper_type is not None:
+        changes["paper_type"] = {"old": paper.paper_type, "new": data.paper_type}
+        paper.paper_type = data.paper_type
     
     log_audit(db, user_id, "UPDATE", "newspapers", paper.id, changes, tid)
     db.commit()
@@ -330,6 +335,111 @@ def get_daily_stock(request: Request, target_date: str, db: Session = Depends(ge
         DailyStock.date == target_date
     ).all()
     return stocks
+
+
+# ──────────────────────────────────────────────
+# WORKER DAILY LEDGER (PER-WORKER STOCK)
+# ──────────────────────────────────────────────
+
+@router.get("/worker-stock/{target_date}", dependencies=[Depends(require_role(["admin"]))])
+def get_worker_stock(request: Request, target_date: str, db: Session = Depends(get_db)):
+    """Fetch all worker stock entries for a specific day across all newspapers."""
+    tid = request.state.tenant_id
+    entries = db.query(WorkerDailyStock).filter(
+        WorkerDailyStock.tenant_id == tid,
+        WorkerDailyStock.date == target_date
+    ).all()
+    
+    # Enrich with worker names and newspaper names
+    result = []
+    for e in entries:
+        worker = db.query(User).filter(User.id == e.worker_id).first()
+        paper = db.query(Newspaper).filter(Newspaper.id == e.newspaper_id).first()
+        result.append({
+            "worker_id": str(e.worker_id),
+            "worker_name": worker.username if worker else "Unknown",
+            "newspaper_id": str(e.newspaper_id),
+            "newspaper_name": paper.name if paper else "Unknown",
+            "paper_type": paper.paper_type if paper else "daily",
+            "taken": e.taken,
+            "returned": e.returned,
+            "amount_given": float(e.amount_given or 0),
+            "date": str(e.date)
+        })
+    return result
+
+
+@router.post("/worker-stock", dependencies=[Depends(require_role(["admin"]))])
+def save_worker_stock(request: Request, data: List[WorkerStockEntry], db: Session = Depends(get_db)):
+    """Bulk upsert worker stock entries with validation."""
+    tid = request.state.tenant_id
+    user_id = request.state.user_id
+    
+    if not data:
+        return {"status": "success", "entries_saved": 0}
+        
+    target_date = data[0].date
+    
+    # 1. Validate returns vs taken for each entry
+    for entry in data:
+        if entry.returned > entry.taken:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Worker returns ({entry.returned}) cannot exceed taken ({entry.taken}) for paper {entry.newspaper_id}"
+            )
+
+    # 2. Validate total worker taken vs agency stock taken
+    # Group by newspaper_id to check totals
+    from collections import defaultdict
+    worker_totals = defaultdict(int)
+    for entry in data:
+        worker_totals[str(entry.newspaper_id)] += entry.taken
+        
+    for paper_id_str, total_taken in worker_totals.items():
+        paper_id = _parse_uuid(paper_id_str)
+        agency_stock = db.query(DailyStock).filter(
+            DailyStock.tenant_id == tid,
+            DailyStock.newspaper_id == paper_id,
+            DailyStock.date == target_date
+        ).first()
+        
+        agency_limit = agency_stock.taken if agency_stock else 0
+        if total_taken > agency_limit:
+            paper = db.query(Newspaper).filter(Newspaper.id == paper_id).first()
+            pname = paper.name if paper else "Unknown"
+            raise HTTPException(
+                status_code=400,
+                detail=f"Total worker assignments ({total_taken}) for '{pname}' exceed agency stock available ({agency_limit})"
+            )
+    
+    for entry in data:
+        existing = db.query(WorkerDailyStock).filter(
+            WorkerDailyStock.tenant_id == tid,
+            WorkerDailyStock.worker_id == entry.worker_id,
+            WorkerDailyStock.newspaper_id == entry.newspaper_id,
+            WorkerDailyStock.date == entry.date
+        ).first()
+        
+        if existing:
+            existing.taken = entry.taken
+            existing.returned = entry.returned
+            existing.amount_given = entry.amount_given
+        else:
+            new_entry = WorkerDailyStock(
+                tenant_id=tid,
+                worker_id=entry.worker_id,
+                newspaper_id=entry.newspaper_id,
+                date=entry.date,
+                taken=entry.taken,
+                returned=entry.returned,
+                amount_given=entry.amount_given
+            )
+            db.add(new_entry)
+            
+    db.commit()
+    log_audit(db, user_id, "UPDATE", "worker_daily_stock", None, 
+              {"count": len(data), "date": str(target_date)}, tid)
+    return {"status": "success", "entries_saved": len(data)}
 
 
 # ──────────────────────────────────────────────
@@ -854,31 +964,36 @@ def get_announcements(request: Request, db: Session = Depends(get_db)):
 # WORKERS
 # ──────────────────────────────────────────────
 
-@router.get("/workers", dependencies=[Depends(require_role(["admin"]))])
+@router.get("/workers", response_model=List[WorkerResponse], dependencies=[Depends(require_role(["admin"]))])
 def list_workers(request: Request, db: Session = Depends(get_db)):
     """List all delivery workers belonging to this agency."""
     tid = request.state.tenant_id
     workers = db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()
-    return [{"id": str(w.id), "username": w.username} for w in workers]
+    return workers
 
 
-@router.post("/workers", dependencies=[Depends(require_role(["admin"]))])
+@router.post("/workers", response_model=WorkerResponse, dependencies=[Depends(require_role(["admin"]))])
 def create_worker(request: Request, data: WorkerCreate, db: Session = Depends(get_db)):
     """Create a new delivery worker account for this agency."""
     tid = request.state.tenant_id
     existing = db.query(User).filter(User.username == data.username).first()
     if existing:
         raise HTTPException(status_code=400, detail="Username already exists")
+    
+    # If password is not provided, use default
+    password = data.password or "123456"
+    
     worker = User(
         username=data.username,
-        password_hash=get_password_hash(data.password),
-        role="worker",
+        password_hash=get_password_hash(password),
+        role=data.role or "worker",
+        phone=data.phone,
         tenant_id=tid,
     )
     db.add(worker)
     db.commit()
     db.refresh(worker)
-    return {"id": str(worker.id), "username": worker.username}
+    return worker
 
 
 # NOTE: /workers/stock must be declared BEFORE /workers/{worker_id}
@@ -886,27 +1001,62 @@ def create_worker(request: Request, data: WorkerCreate, db: Session = Depends(ge
 
 @router.get("/workers/stock", dependencies=[Depends(require_role(["admin"]))])
 def get_worker_stock(request: Request, target_date: str = None, db: Session = Depends(get_db)):
-    """Get all worker daily stock entries for a given date (defaults to today)."""
+    """Get all worker daily stock entries for a given date with cumulative monthly/yearly counts."""
     tid = request.state.tenant_id
-    d = target_date or str(date.today())
+    d_obj = datetime.strptime(target_date, "%Y-%m-%d").date() if target_date else date.today()
+    d_str = str(d_obj)
+    
+    first_of_month = d_obj.replace(day=1)
+    first_of_year = d_obj.replace(month=1, day=1)
+    
     entries = db.query(WorkerDailyStock).filter(
         WorkerDailyStock.tenant_id == tid,
-        WorkerDailyStock.date == d
+        WorkerDailyStock.date == d_str
     ).all()
+    
     worker_map = {str(w.id): w.username for w in db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()}
-    paper_map = {str(p.id): p.name for p in db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()}
-    return [{
-        "id": str(e.id),
-        "worker_id": str(e.worker_id),
-        "worker_name": worker_map.get(str(e.worker_id), "Unknown"),
-        "newspaper_id": str(e.newspaper_id),
-        "newspaper_name": paper_map.get(str(e.newspaper_id), "Unknown"),
-        "date": str(e.date),
-        "taken": e.taken or 0,
-        "returned": e.returned or 0,
-        "sold": (e.taken or 0) - (e.returned or 0),
-        "amount_given": float(e.amount_given) if e.amount_given else 0.0,
-    } for e in entries]
+    np_rows = db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()
+    paper_map = {str(p.id): p.name for p in np_rows}
+    paper_type_map = {str(p.id): p.paper_type for p in np_rows}
+    
+    # Calculate cumulative counts for the specific (worker, paper) pairs found today
+    # to avoid pulling the entire table if possible, but let's just do a focused query.
+    results = []
+    for e in entries:
+        # Cumulative Taken this month
+        month_taken = db.query(func.sum(WorkerDailyStock.taken)).filter(
+            WorkerDailyStock.tenant_id == tid,
+            WorkerDailyStock.worker_id == e.worker_id,
+            WorkerDailyStock.newspaper_id == e.newspaper_id,
+            WorkerDailyStock.date >= first_of_month,
+            WorkerDailyStock.date <= d_obj
+        ).scalar() or 0
+        
+        # Cumulative Taken this year
+        year_taken = db.query(func.sum(WorkerDailyStock.taken)).filter(
+            WorkerDailyStock.tenant_id == tid,
+            WorkerDailyStock.worker_id == e.worker_id,
+            WorkerDailyStock.newspaper_id == e.newspaper_id,
+            WorkerDailyStock.date >= first_of_year,
+            WorkerDailyStock.date <= d_obj
+        ).scalar() or 0
+
+        results.append({
+            "id": str(e.id),
+            "worker_id": str(e.worker_id),
+            "worker_name": worker_map.get(str(e.worker_id), "Unknown"),
+            "newspaper_id": str(e.newspaper_id),
+            "newspaper_name": paper_map.get(str(e.newspaper_id), "Unknown"),
+            "paper_type": paper_type_map.get(str(e.newspaper_id), "daily"),
+            "date": str(e.date),
+            "taken": e.taken or 0,
+            "month_taken": int(month_taken),
+            "year_taken": int(year_taken),
+            "returned": e.returned or 0,
+            "sold": (e.taken or 0) - (e.returned or 0),
+            "amount_given": float(e.amount_given) if e.amount_given else 0.0,
+        })
+    return results
 
 
 @router.post("/workers/stock", dependencies=[Depends(require_role(["admin"]))])
@@ -945,27 +1095,73 @@ def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = 
 
 @router.get("/workers/{worker_id}/summary", dependencies=[Depends(require_role(["admin"]))])
 def get_worker_summary(request: Request, worker_id: str, db: Session = Depends(get_db)):
-    """All-time totals for a single worker: taken, returned, sold, amount given."""
+    """Detailed summary for a single worker with daily/monthly/yearly breakdowns by paper type."""
     tid = request.state.tenant_id
     uid = _parse_uuid(worker_id)
     worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
     if not worker:
         raise HTTPException(status_code=404, detail="Worker not found")
-    entries = db.query(WorkerDailyStock).filter(
+    
+    today = date.today()
+    first_of_month = today.replace(day=1)
+    first_of_year = today.replace(month=1, day=1)
+
+    all_entries = db.query(WorkerDailyStock).filter(
         WorkerDailyStock.tenant_id == tid,
         WorkerDailyStock.worker_id == uid
     ).all()
-    total_taken = sum(e.taken or 0 for e in entries)
-    total_returned = sum(e.returned or 0 for e in entries)
-    return {
+
+    # Pre-fetch newspapers for type mapping
+    papers = {p.id: p for p in db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()}
+
+    def get_breakdown(entries):
+        breakdown = {
+            "daily": {"taken": 0, "returned": 0, "sold": 0},
+            "monthly": {"taken": 0, "returned": 0, "sold": 0},
+            "yearly": {"taken": 0, "returned": 0, "sold": 0},
+            "total": {"taken": 0, "returned": 0, "sold": 0},
+            "amount_given": 0.0,
+            "papers": {}
+        }
+        for e in entries:
+            paper = papers.get(e.newspaper_id)
+            if not paper: continue
+            ptype = paper.paper_type or "daily"
+            
+            t, r = (e.taken or 0), (e.returned or 0)
+            s = t - r
+            
+            if ptype in breakdown:
+                breakdown[ptype]["taken"] += t
+                breakdown[ptype]["returned"] += r
+                breakdown[ptype]["sold"] += s
+            
+            breakdown["total"]["taken"] += t
+            breakdown["total"]["returned"] += r
+            breakdown["total"]["sold"] += s
+            breakdown["amount_given"] += float(e.amount_given or 0)
+            
+            pname = paper.name
+            if pname not in breakdown["papers"]:
+                breakdown["papers"][pname] = {"taken": 0, "returned": 0, "sold": 0, "type": ptype}
+            
+            breakdown["papers"][pname]["taken"] += t
+            breakdown["papers"][pname]["returned"] += r
+            breakdown["papers"][pname]["sold"] += s
+            
+        breakdown["amount_given"] = round(breakdown["amount_given"], 2)
+        return breakdown
+
+    summary = {
         "worker_id": str(uid),
         "username": worker.username,
-        "total_taken": total_taken,
-        "total_returned": total_returned,
-        "total_sold": total_taken - total_returned,
-        "total_amount_given": round(sum(float(e.amount_given) for e in entries if e.amount_given), 2),
-        "entries_count": len(entries),
+        "all_time": get_breakdown(all_entries),
+        "today": get_breakdown([e for e in all_entries if e.date == today]),
+        "this_month": get_breakdown([e for e in all_entries if e.date >= first_of_month]),
+        "this_year": get_breakdown([e for e in all_entries if e.date >= first_of_year]),
     }
+    
+    return summary
 
 
 @router.delete("/workers/{worker_id}", dependencies=[Depends(require_role(["admin"]))])

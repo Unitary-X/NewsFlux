@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, Plus, Trash2, X, Loader2, RefreshCw,
     Calendar, Save, Package, IndianRupee, TrendingUp,
+    User, ShieldCheck, Phone,
 } from 'lucide-react';
 import api from '../../utils/api';
 
@@ -13,7 +14,7 @@ export default function Workers() {
 
     // Add worker form
     const [showAddForm, setShowAddForm] = useState(false);
-    const [workerForm, setWorkerForm] = useState({ username: '', password: '' });
+    const [workerForm, setWorkerForm] = useState({ username: '', role: 'worker', phone: '' });
     const [submitting, setSubmitting] = useState(false);
 
     // Daily ledger
@@ -94,7 +95,7 @@ export default function Workers() {
         setSubmitting(true);
         try {
             await api.post('/admin/workers', workerForm);
-            setWorkerForm({ username: '', password: '' });
+            setWorkerForm({ username: '', role: 'worker', phone: '' });
             setShowAddForm(false);
             loadData();
         } catch (err) {
@@ -280,27 +281,46 @@ export default function Workers() {
                         onSubmit={addWorker}
                         className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex items-end gap-4 flex-wrap"
                     >
-                        <div className="flex-1 min-w-40">
-                            <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
-                            <input
-                                value={workerForm.username}
-                                onChange={e => setWorkerForm(p => ({ ...p, username: e.target.value }))}
-                                required
-                                placeholder="e.g. worker_ravi"
-                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Name of the Worker</label>
+                            <div className="relative">
+                                <User className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    value={workerForm.username}
+                                    onChange={e => setWorkerForm(p => ({ ...p, username: e.target.value }))}
+                                    required
+                                    placeholder="Full Name"
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                />
+                            </div>
                         </div>
-                        <div className="flex-1 min-w-40">
-                            <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
-                            <input
-                                type="password"
-                                value={workerForm.password}
-                                onChange={e => setWorkerForm(p => ({ ...p, password: e.target.value }))}
-                                required
-                                minLength={6}
-                                placeholder="Min 6 characters"
-                                className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
-                            />
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Role of the Worker</label>
+                            <div className="relative">
+                                <ShieldCheck className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <select
+                                    value={workerForm.role}
+                                    onChange={e => setWorkerForm(p => ({ ...p, role: e.target.value }))}
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none appearance-none transition-all cursor-pointer"
+                                >
+                                    <option value="worker">Delivery Worker</option>
+                                    <option value="supervisor">Supervisor</option>
+                                    <option value="admin">Manager</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Phone Number of the Worker</label>
+                            <div className="relative">
+                                <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    type="tel"
+                                    value={workerForm.phone}
+                                    onChange={e => setWorkerForm(p => ({ ...p, phone: e.target.value }))}
+                                    placeholder="e.g. 9876543210"
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                />
+                            </div>
                         </div>
                         <button
                             type="submit"
@@ -335,7 +355,12 @@ export default function Workers() {
                                                 </div>
                                                 <div>
                                                     <p className="font-semibold text-slate-800 text-sm">{w.username}</p>
-                                                    <p className="text-xs text-slate-400">Delivery Worker</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <span className="text-[10px] uppercase font-bold text-blue-600 bg-blue-50 px-1.5 py-0.5 rounded border border-blue-100">
+                                                            {w.role || 'Worker'}
+                                                        </span>
+                                                        {w.phone && <span className="text-[11px] text-slate-400 font-medium">{w.phone}</span>}
+                                                    </div>
                                                 </div>
                                             </div>
                                             <button
@@ -347,23 +372,65 @@ export default function Workers() {
                                             </button>
                                         </div>
 
-                                        {/* Stats grid */}
-                                        <div className="grid grid-cols-2 gap-2">
-                                            <div className="bg-white rounded-lg p-2.5 border border-slate-200">
-                                                <p className="text-xs text-slate-400">Papers Taken</p>
-                                                <p className="font-bold text-slate-700 mt-0.5 text-xl">{s?.total_taken ?? 0}</p>
-                                            </div>
-                                            <div className="bg-white rounded-lg p-2.5 border border-slate-200">
-                                                <p className="text-xs text-slate-400">Papers Returned</p>
-                                                <p className="font-bold text-slate-700 mt-0.5 text-xl">{s?.total_returned ?? 0}</p>
-                                            </div>
-                                            <div className="bg-emerald-50 rounded-lg p-2.5 border border-emerald-200">
-                                                <p className="text-xs text-emerald-600">Papers Sold</p>
-                                                <p className="font-bold text-emerald-700 mt-0.5 text-xl">{s?.total_sold ?? 0}</p>
-                                            </div>
-                                            <div className="bg-amber-50 rounded-lg p-2.5 border border-amber-200">
-                                                <p className="text-xs text-amber-600">Amount Given</p>
-                                                <p className="font-bold text-amber-700 mt-0.5 text-xl">₹{(s?.total_amount_given ?? 0).toFixed(0)}</p>
+                                        {/* Temporal Breakdown */}
+                                        <div className="space-y-3 mt-1">
+                                            {['today', 'this_month', 'this_year'].map(period => {
+                                                const data = s?.[period] || { total: { sold: 0, taken: 0, returned: 0 }, papers: {}, amount_given: 0 };
+                                                const label = period === 'today' ? 'Today' : period === 'this_month' ? 'This Month' : 'This Year';
+                                                const color = period === 'today' ? 'blue' : period === 'this_month' ? 'indigo' : 'emerald';
+                                                
+                                                return (
+                                                    <div key={period} className="bg-white rounded-lg p-3 border border-slate-200">
+                                                        <div className={`text-[10px] font-black uppercase tracking-[0.1em] text-${color}-600 mb-2 flex justify-between items-center`}>
+                                                            <span>{label}</span>
+                                                            {data.total.sold > 0 && <span className="bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded-full">{data.total.sold} sold</span>}
+                                                        </div>
+                                                        
+                                                        {data.total.taken === 0 ? (
+                                                            <div className="text-[10px] text-slate-300 italic text-center py-1">No papers handled</div>
+                                                        ) : (
+                                                            <div className="space-y-1.5">
+                                                                {Object.entries(data.papers).map(([name, info]) => (
+                                                                    <div key={name} className="flex justify-between items-center text-xs">
+                                                                        <div className="flex flex-col">
+                                                                            <div className="flex items-center gap-2">
+                                                                                <span className="text-slate-700 font-medium">{name}</span>
+                                                                                <span className="text-[9px] uppercase font-bold text-slate-400 bg-slate-50 px-1 rounded border border-slate-100">{info.type}</span>
+                                                                            </div>
+                                                                            <div className="text-[9px] text-slate-400 mt-0.5">
+                                                                                T: <span className="font-semibold text-slate-500">{info.taken}</span> • 
+                                                                                R: <span className="font-semibold text-slate-500">{info.returned}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div className="text-right">
+                                                                            <p className="font-bold text-slate-900">{info.sold}</p>
+                                                                            <p className="text-[8px] uppercase font-black text-slate-400 tracking-tighter">Sold</p>
+                                                                        </div>
+                                                                    </div>
+                                                                ))}
+                                                                <div className="pt-1.5 mt-1.5 border-t border-slate-100 flex justify-between items-end">
+                                                                    <div className="text-[9px] text-slate-400 space-y-0.5">
+                                                                        <p>Total Taken: <span className="font-bold text-slate-600">{data.total.taken}</span></p>
+                                                                        <p>Total Returned: <span className="font-bold text-slate-600">{data.total.returned}</span></p>
+                                                                    </div>
+                                                                    <div className="text-right">
+                                                                        <div className="text-[10px] font-black text-slate-700">Total Sold: {data.total.sold}</div>
+                                                                        {data.amount_given > 0 && (
+                                                                            <div className="text-[10px] font-black text-amber-600">Collected: ₹{data.amount_given.toFixed(2)}</div>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                );
+                                            })}
+                                        </div>
+
+                                        <div className="bg-amber-50 rounded-lg p-3 border border-amber-200 mt-2">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-xs text-amber-600 font-bold uppercase tracking-wider">All-Time Collection</span>
+                                                <span className="font-black text-xl text-amber-700">₹{(s?.all_time?.amount_given ?? 0).toFixed(2)}</span>
                                             </div>
                                         </div>
                                     </div>
