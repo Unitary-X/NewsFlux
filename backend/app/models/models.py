@@ -87,6 +87,8 @@ class Invoice(Base):
     year = Column(Integer, nullable=False)
     total_amount = Column(DECIMAL(10, 2), nullable=False)
     delivery_fee = Column(DECIMAL(10, 2), default=0.00)
+    manual_paper_name = Column(String(100), nullable=True)
+    manual_paper_price = Column(DECIMAL(10, 2), nullable=True)
     status = Column(String(20), default="pending") # pending, paid
 
 class AuditLog(Base):

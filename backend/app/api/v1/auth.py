@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from slowapi.errors import RateLimitExceeded
 from sqlalchemy.orm import Session
 from datetime import timedelta, datetime
 from typing import Optional
@@ -37,7 +38,7 @@ class RegisterWithTemplate(BaseModel):
     template_id: Optional[str] = None
 
 @router.post("/register", response_model=Token)
-@limiter.limit("2/hour")
+@limiter.limit("100/hour")
 def register_agency(request: Request, body: RegisterWithTemplate, db: Session = Depends(get_db)):
     try:
         # Check if username exists
@@ -106,8 +107,8 @@ def register_agency(request: Request, body: RegisterWithTemplate, db: Session = 
             "token_type": "bearer",
             "refresh_token": refresh_token
         }
-    except HTTPException:
-        # Re-raise HTTP exceptions (like "Username already registered")
+    except (HTTPException, RateLimitExceeded):
+        # Re-raise HTTP exceptions and rate limit errors
         db.rollback()
         raise
     except Exception as e:

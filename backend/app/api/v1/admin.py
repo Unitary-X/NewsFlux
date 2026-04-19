@@ -555,7 +555,14 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
     delivery_fee = data.delivery_fee
 
     days_in_month = monthrange(year, month)[1]
-    customers = db.query(Customer).filter(Customer.tenant_id == tid).all()
+    
+    if data.customer_id:
+        customers = db.query(Customer).filter(Customer.id == data.customer_id, Customer.tenant_id == tid).all()
+        if not customers:
+            raise HTTPException(status_code=404, detail="Customer not found")
+    else:
+        customers = db.query(Customer).filter(Customer.tenant_id == tid).all()
+
     generated = 0
 
     for cust in customers:
@@ -567,7 +574,14 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             Invoice.year == year
         ).first()
         if existing:
-            continue
+            if data.customer_id:
+                # User is explicitly requesting a bill for this customer, override existing bill (even if paid)
+                db.delete(existing)
+            else:
+                if existing.status == 'paid':
+                    # Batch processing skips paid invoices
+                    continue
+                continue
 
         # Get active subscriptions
         subs = db.query(CustomerSubscription).filter(
@@ -575,30 +589,72 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             CustomerSubscription.tenant_id == tid,
             CustomerSubscription.status == 1
         ).all()
-        if not subs:
-            continue
 
         total = 0.0
         has_non_yearly_sub = False
-        for sub in subs:
-            paper = db.query(Newspaper).filter(Newspaper.id == sub.newspaper_id).first()
-            if paper:
-                price = float(sub.price) if sub.price else float(paper.base_price)
-                # Deduct for missed deliveries if daily delivery records exist
-                from sqlalchemy import extract
-                missed_days = db.query(func.count(DailyDelivery.id)).filter(
-                    DailyDelivery.tenant_id == tid,
-                    DailyDelivery.customer_id == cust.id,
-                    DailyDelivery.status == "missed",
-                    extract('month', DailyDelivery.date) == month,
-                    extract('year', DailyDelivery.date) == year
-                ).scalar() or 0
-                billable_days = days_in_month - missed_days
-                total += price * sub.quantity * billable_days
-                if sub.subscription_type != "yearly":
-                    has_non_yearly_sub = True
 
-        # Service charge (delivery_fee) only applies for non-yearly subscriptions
+        from sqlalchemy import extract
+
+        manual_paper_name = None
+        manual_paper_price = 0.0
+
+        if data.customer_id and data.paper_name:
+            # Manual override: use actual DailyStock (taken - returned) for the selected paper
+            manual_paper_name = data.paper_name
+            manual_paper_price = data.paper_price or 0.0
+
+            # Find the newspaper record to get its ID
+            newspaper = db.query(Newspaper).filter(
+                Newspaper.tenant_id == tid,
+                Newspaper.name == data.paper_name
+            ).first()
+
+            if newspaper:
+                # Sum all daily stock entries for this paper in the given month
+                stock_rows = db.query(DailyStock).filter(
+                    DailyStock.tenant_id == tid,
+                    DailyStock.newspaper_id == newspaper.id,
+                    extract('month', DailyStock.date) == month,
+                    extract('year', DailyStock.date) == year
+                ).all()
+
+                if stock_rows:
+                    # total papers sold = sum(taken - returned) across all days
+                    total_sold = sum((row.taken or 0) - (row.returned or 0) for row in stock_rows)
+                    total = manual_paper_price * max(total_sold, 0)
+                else:
+                    # No stock entries found — fall back to days in month
+                    total = manual_paper_price * days_in_month
+            else:
+                # Paper not found in DB — fall back to days in month
+                total = manual_paper_price * days_in_month
+
+            has_non_yearly_sub = True
+        else:
+            # Regular subscription calculation: price × quantity × billable days
+            missed_days = db.query(func.count(DailyDelivery.id)).filter(
+                DailyDelivery.tenant_id == tid,
+                DailyDelivery.customer_id == cust.id,
+                DailyDelivery.status == "missed",
+                extract('month', DailyDelivery.date) == month,
+                extract('year', DailyDelivery.date) == year
+            ).scalar() or 0
+            billable_days = days_in_month - missed_days
+
+            for sub in subs:
+                paper = db.query(Newspaper).filter(Newspaper.id == sub.newspaper_id).first()
+                if paper:
+                    price = float(sub.price) if sub.price else float(paper.base_price)
+                    total += price * sub.quantity * billable_days
+                    if sub.subscription_type != "yearly":
+                        has_non_yearly_sub = True
+
+        if not subs and not manual_paper_name:
+            if data.customer_id:
+                raise HTTPException(status_code=400, detail="Customer has no active subscriptions and no manual paper was provided.")
+            continue
+
+        # Service charge only applies for non-yearly subscriptions
         applied_fee = delivery_fee if has_non_yearly_sub else 0.0
         total += applied_fee
 
@@ -609,6 +665,8 @@ def generate_bills(request: Request, data: GenerateBillsRequest, db: Session = D
             year=year,
             total_amount=round(total, 2),
             delivery_fee=applied_fee,
+            manual_paper_name=manual_paper_name,
+            manual_paper_price=manual_paper_price,
             status="pending"
         )
         db.add(invoice)
@@ -632,6 +690,23 @@ def list_invoices(request: Request, month: int = None, year: int = None, status:
     result = []
     for inv in invoices:
         cust = db.query(Customer).filter(Customer.id == inv.customer_id).first()
+        
+        subs = db.query(CustomerSubscription).filter(
+            CustomerSubscription.customer_id == inv.customer_id,
+            CustomerSubscription.tenant_id == tid,
+            CustomerSubscription.status == 1
+        ).all()
+        paper_names = []
+        for s in subs:
+            p = db.query(Newspaper).filter(Newspaper.id == s.newspaper_id).first()
+            if p:
+                paper_names.append(p.name)
+                
+        if inv.manual_paper_name:
+            paper_names.append(f"{inv.manual_paper_name} (Manual Entry)")
+            
+        newspapers_str = ", ".join(paper_names) if paper_names else "Unknown"
+
         result.append({
             "id": str(inv.id),
             "customer_id": str(inv.customer_id),
@@ -642,6 +717,9 @@ def list_invoices(request: Request, month: int = None, year: int = None, status:
             "status": inv.status,
             "tenant_id": str(inv.tenant_id),
             "customer_name": cust.name if cust else None,
+            "newspapers": newspapers_str,
+            "manual_paper_name": inv.manual_paper_name,
+            "manual_paper_price": float(inv.manual_paper_price) if inv.manual_paper_price is not None else None,
         })
     return result
 

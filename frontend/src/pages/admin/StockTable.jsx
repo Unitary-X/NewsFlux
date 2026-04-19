@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
 import { Save, Loader2, Calendar, AlertTriangle, User, Plus, Trash2, IndianRupee, Phone, ShieldCheck, UserPlus } from 'lucide-react';
 import { TableSkeleton } from '../../components/Skeleton';
@@ -21,9 +21,28 @@ export default function StockTable() {
     // Editable breakdown state
     const [breakdown, setBreakdown] = useState({ daily: 0, monthly: 0, yearly: 0 });
 
+    // Auto-save state
+    const [autoSaveStatus, setAutoSaveStatus] = useState(''); 
+    const [autoSaveErrors, setAutoSaveErrors] = useState([]);
+    const initialRender = useRef(true);
+
     useEffect(() => {
         fetchData();
     }, [date]);
+
+    useEffect(() => {
+        if (initialRender.current) {
+            initialRender.current = false;
+            return;
+        }
+        if (isLoading || newspapers.length === 0) return;
+
+        const timer = setTimeout(() => {
+            saveAll(true);
+        }, 1500);
+
+        return () => clearTimeout(timer);
+    }, [stock, workerStock]);
 
     const fetchData = async () => {
         setIsLoading(true);
@@ -101,10 +120,9 @@ export default function StockTable() {
             });
 
             await Promise.all(promises);
-            alert('Stock saved successfully!');
         } catch (err) {
-            alert('Failed to save stock.');
             console.error(err);
+            throw err;
         } finally {
             setIsSaving(false);
         }
@@ -149,16 +167,18 @@ export default function StockTable() {
                 })
             );
             await Promise.all(promises);
-            alert('Worker ledger saved successfully!');
         } catch (err) {
-            alert('Failed to save worker ledger.');
             console.error(err);
+            throw err;
         } finally {
             setIsSavingWorker(false);
         }
     };
  
-    const saveAll = async () => {
+    const saveAll = async (isSilent = false) => {
+        setAutoSaveStatus('saving');
+        setAutoSaveErrors([]);
+        
         // Validation checks
         const errors = [];
         
@@ -186,15 +206,23 @@ export default function StockTable() {
         });
 
         if (errors.length > 0) {
-            alert("Please fix the following issues before saving:\n\n" + errors.join("\n"));
+            setAutoSaveErrors(errors);
+            setAutoSaveStatus('error');
+            if (!isSilent) {
+                alert("Please fix the following issues before saving:\n\n" + errors.join("\n"));
+            }
             return;
         }
 
         setIsSaving(true);
         try {
             await Promise.all([saveStock(), saveWorkerStock()]);
+            setAutoSaveStatus('saved');
+            if (!isSilent) alert('All ledger stock saved successfully!');
+            setTimeout(() => setAutoSaveStatus(''), 3000);
         } catch (err) {
-            // Error handling already in individual functions
+            setAutoSaveStatus('error');
+            if (!isSilent) alert('Failed to save ledger stock.');
         } finally {
             setIsSaving(false);
         }
@@ -244,15 +272,29 @@ export default function StockTable() {
                     </div>
 
                     <button
-                        onClick={saveAll}
+                        onClick={() => saveAll()}
                         disabled={isSaving || isSavingWorker || isLoading}
                         className="flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white px-5 py-2 rounded-lg font-medium shadow-md shadow-blue-500/20 transition-all disabled:opacity-70"
                     >
                         {isSaving || isSavingWorker ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />}
                         Save All Ledger
                     </button>
+                    {autoSaveStatus === 'saved' && <span className="text-sm font-bold text-emerald-600 ml-2 absolute -right-20">Saved</span>}
+                    {autoSaveStatus === 'saving' && <span className="text-sm font-mono text-slate-400 ml-2 flex items-center gap-1 absolute -right-[88px]"><Loader2 className="w-3 h-3 animate-spin"/> Saving</span>}
                 </div>
             </div>
+            
+            {/* Display AutoSave Errors explicitly if they exist */}
+            {autoSaveErrors.length > 0 && (
+                <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl">
+                    <h3 className="text-sm font-bold text-red-600 mb-2 flex items-center gap-2">
+                        <AlertTriangle className="w-4 h-4" /> Failed to auto-save ledger
+                    </h3>
+                    <ul className="text-xs text-red-500 font-medium pl-6 list-disc">
+                        {autoSaveErrors.map((e, i) => <li key={i}>{e}</li>)}
+                    </ul>
+                </div>
+            )}
 
             {/* Editable Breakdown Cards */}
             {!isLoading && newspapers.length > 0 && (

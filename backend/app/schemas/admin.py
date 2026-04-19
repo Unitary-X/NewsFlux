@@ -86,12 +86,18 @@ class InvoiceResponse(BaseModel):
     status: str
     tenant_id: UUID
     customer_name: Optional[str] = None
+    newspapers: Optional[str] = None
+    manual_paper_name: Optional[str] = None
+    manual_paper_price: Optional[float] = None
     model_config = ConfigDict(from_attributes=True)
 
 class GenerateBillsRequest(BaseModel):
     month: int
     year: int
     delivery_fee: float = 0.0
+    customer_id: Optional[UUID] = None
+    paper_name: Optional[str] = None
+    paper_price: Optional[float] = None
 
 # --- PRICING GRID ---
 class PricingGridEntry(BaseModel):
