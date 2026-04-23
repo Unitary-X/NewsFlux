@@ -29,10 +29,12 @@ services:
       - redis
     ports:
       - "8000:8000"
+    env_file:
+      - .env
     environment:
+      # Override DATABASE_URL so the backend talks to the db container, not localhost
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/newsflux
       - REDIS_URL=redis://redis:6379/0
-      - SECRET_KEY=9a2b4def7e8f0a214bc9e8ad0f3f21873bcd4e7a8f15b3a4d9e0f6c2e8a10b4f
 
   celery_worker:
     build:
@@ -43,6 +45,8 @@ services:
     depends_on:
       - db
       - redis
+    env_file:
+      - .env
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@db:5432/newsflux
       - REDIS_URL=redis://redis:6379/0

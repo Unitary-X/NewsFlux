@@ -1219,35 +1219,91 @@ def sa_gdrive_status(db: Session = Depends(get_db)):
 
 
 @router.get("/backup/gdrive/connect", dependencies=[Depends(require_role(["super_admin"]))])
-def sa_gdrive_connect():
-    """Get Google OAuth URL for super admin Drive connection."""
+def sa_gdrive_connect(db: Session = Depends(get_db)):
+    """Get Google OAuth URL for super admin Drive connection.
+    Stores a random state nonce in PlatformSettings for CSRF protection.
+    """
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=400, detail="Google Drive integration not configured")
+
+    import secrets
+    nonce = secrets.token_urlsafe(32)
+
+    # Persist nonce so the browser-redirect callback can verify it
+    sa_state_setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_oauth_state"
+    ).first()
+    if sa_state_setting:
+        sa_state_setting.setting_value = nonce
+    else:
+        db.add(PlatformSettings(setting_key="sa_gdrive_oauth_state", setting_value=nonce))
+    db.commit()
+
     from app.services.gdrive_service import get_authorization_url
-    return {"url": get_authorization_url()}
+    url = get_authorization_url(
+        redirect_uri=settings.GOOGLE_SA_REDIRECT_URI,
+        state=nonce,
+    )
+    return {"url": url}
 
 
-@router.get("/backup/gdrive/callback", dependencies=[Depends(require_role(["super_admin"]))])
-def sa_gdrive_callback(code: str, db: Session = Depends(get_db)):
-    """OAuth callback — store super admin's Drive refresh token."""
+@router.get("/backup/gdrive/callback")
+def sa_gdrive_callback(code: str, state: str = "", db: Session = Depends(get_db)):
+    """OAuth callback for super-admin Google Drive connection.
+
+    NOTE: This endpoint is hit by a *browser redirect* from Google — there is
+    no Bearer token available. Authentication is replacement by a state-nonce
+    that was stored in PlatformSettings during the /connect step.
+    """
+    frontend_url = settings.FRONTEND_URL
+
+    # --- Validate CSRF nonce ---
+    sa_state_setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_oauth_state"
+    ).first()
+
+    stored_state = sa_state_setting.setting_value if sa_state_setting else None
+    if not stored_state or stored_state != state:
+        # Nonce mismatch — possible CSRF attempt or stale link
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_error=invalid_state")
+
+    # Consume the nonce immediately so it can't be replayed
+    if sa_state_setting:
+        db.delete(sa_state_setting)
+        db.commit()
+
     from app.services.gdrive_service import exchange_code_for_tokens
     from app.core.security import encrypt_token
-    tokens = exchange_code_for_tokens(code)
+    from fastapi.responses import RedirectResponse
+
+    try:
+        tokens = exchange_code_for_tokens(code, redirect_uri=settings.GOOGLE_SA_REDIRECT_URI)
+    except Exception:
+        return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_error=oauth_failed")
+
     if not tokens.get("refresh_token"):
-        raise HTTPException(status_code=400, detail="No refresh token received. Try disconnecting and reconnecting.")
+        return RedirectResponse(
+            url=f"{frontend_url}/superadmin/backup?sa_error=no_refresh_token"
+        )
 
     encrypted = encrypt_token(tokens["refresh_token"])
 
-    # Upsert token
-    for key, val in [("sa_gdrive_refresh_token", encrypted), ("sa_gdrive_connected_at", datetime.utcnow().isoformat())]:
-        setting = db.query(PlatformSettings).filter(PlatformSettings.setting_key == key).first()
+    # Upsert token + timestamp
+    for key, val in [
+        ("sa_gdrive_refresh_token", encrypted),
+        ("sa_gdrive_connected_at", datetime.utcnow().isoformat()),
+    ]:
+        setting = db.query(PlatformSettings).filter(
+            PlatformSettings.setting_key == key
+        ).first()
         if setting:
             setting.setting_value = val
         else:
             db.add(PlatformSettings(setting_key=key, setting_value=val))
 
     db.commit()
-    return {"status": "connected"}
+    return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_connected=true")
 
 
 @router.post("/backup/gdrive/disconnect", dependencies=[Depends(require_role(["super_admin"]))])

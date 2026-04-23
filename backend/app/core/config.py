@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     # Google OAuth for Drive Backup
     GOOGLE_CLIENT_ID: str = ""
     GOOGLE_CLIENT_SECRET: str = ""
+    # Agency-admin OAuth callback (registered in Google Cloud Console)
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/backup/google/callback"
+    # Super-admin OAuth callback (must also be registered in Google Cloud Console)
+    GOOGLE_SA_REDIRECT_URI: str = "http://localhost:8000/api/v1/superadmin/backup/gdrive/callback"
     GDRIVE_ENABLED: bool = False
 
     # Email Configuration

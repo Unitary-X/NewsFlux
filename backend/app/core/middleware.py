@@ -11,7 +11,15 @@ logger = logging.getLogger(__name__)
 class TenantMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         # Allow open routes like login and docs
-        open_routes = ["/health", "/api/v1/auth/login", "/api/v1/auth/register", "/docs", "/openapi.json", "/api/v1/backup/google/callback"]
+        open_routes = [
+            "/health", 
+            "/api/v1/auth/login", 
+            "/api/v1/auth/register", 
+            "/docs", 
+            "/openapi.json", 
+            "/api/v1/backup/google/callback",
+            "/api/v1/superadmin/backup/gdrive/callback"
+        ]
         if request.url.path in open_routes:
             return await call_next(request)
 

@@ -23,33 +23,52 @@ from app.core.security import encrypt_token, decrypt_token  # noqa: F401
 
 # ── OAuth2 flow ──────────────────────────────────────────────────
 
-def get_oauth_flow() -> Flow:
+def get_oauth_flow(redirect_uri: Optional[str] = None) -> Flow:
+    """Build a Google OAuth2 flow.
+
+    Args:
+        redirect_uri: Which redirect URI to use. Defaults to the agency-admin one.
+                      Both admin and super-admin URIs are listed so Google accepts either.
+    """
     client_config = {
         "web": {
             "client_id": settings.GOOGLE_CLIENT_ID,
             "client_secret": settings.GOOGLE_CLIENT_SECRET,
             "auth_uri": "https://accounts.google.com/o/oauth2/auth",
             "token_uri": "https://oauth2.googleapis.com/token",
-            "redirect_uris": [settings.GOOGLE_REDIRECT_URI],
+            "redirect_uris": [
+                settings.GOOGLE_REDIRECT_URI,
+                settings.GOOGLE_SA_REDIRECT_URI,
+            ],
         }
     }
     flow = Flow.from_client_config(client_config, scopes=SCOPES)
-    flow.redirect_uri = settings.GOOGLE_REDIRECT_URI
+    flow.redirect_uri = redirect_uri or settings.GOOGLE_REDIRECT_URI
     return flow
 
 
-def get_authorization_url() -> str:
-    flow = get_oauth_flow()
-    url, _ = flow.authorization_url(
-        access_type="offline",
-        include_granted_scopes="true",
-        prompt="consent",  # Force consent to always get refresh_token
-    )
+def get_authorization_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
+    """Build a Google OAuth2 authorization URL.
+
+    Args:
+        redirect_uri: Override the default redirect URI (e.g. super-admin callback).
+        state:        Optional CSRF-protection nonce to embed in the URL.
+    """
+    flow = get_oauth_flow(redirect_uri=redirect_uri)
+    kwargs: dict = {
+        "access_type": "offline",
+        "include_granted_scopes": "true",
+        "prompt": "consent",  # Force consent so we always get a refresh_token
+    }
+    if state:
+        kwargs["state"] = state
+    url, _ = flow.authorization_url(**kwargs)
     return url
 
 
-def exchange_code_for_tokens(code: str) -> dict:
-    flow = get_oauth_flow()
+def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None) -> dict:
+    """Exchange an authorization code for access + refresh tokens."""
+    flow = get_oauth_flow(redirect_uri=redirect_uri)
     flow.fetch_token(code=code)
     creds = flow.credentials
     return {

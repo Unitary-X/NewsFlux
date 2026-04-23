@@ -21,6 +21,7 @@ export default function SuperAdminBackup() {
     // SA GDrive state
     const [saGdrive, setSaGdrive] = useState({ connected: false, connected_at: null });
     const [saGdriveLoading, setSaGdriveLoading] = useState(null); // 'connect' | 'disconnect' | 'upload'
+    const [saNotification, setSaNotification] = useState(null); // { type: 'success'|'error', msg }
     // Backup All state
     const [backupAllLoading, setBackupAllLoading] = useState(false);
     const [backupAllResult, setBackupAllResult] = useState(null);
@@ -38,13 +39,39 @@ export default function SuperAdminBackup() {
 
     useEffect(() => { fetchAgencies(); }, [fetchAgencies]);
 
+    // Fetch SA GDrive status once on mount
+    const fetchSaGdriveStatus = () => {
+        api.get('/superadmin/backup/gdrive/status')
+            .then(res => setSaGdrive(res.data))
+            .catch(() => {});
+    };
+
     useEffect(() => {
         api.get('/superadmin/backup/db/stats')
             .then(res => setDbStats(res.data))
             .catch(() => setDbStats(null));
-        api.get('/superadmin/backup/gdrive/status')
-            .then(res => setSaGdrive(res.data))
-            .catch(() => {});
+        fetchSaGdriveStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    // ─── Handle OAuth redirect back from Google ───────────────────────
+    useEffect(() => {
+        const params = new URLSearchParams(window.location.search);
+        if (params.get('sa_connected') === 'true') {
+            window.history.replaceState({}, '', '/superadmin/backup');
+            fetchSaGdriveStatus();
+            setSaNotification({ type: 'success', msg: 'Google Drive connected to Super Admin successfully!' });
+        } else if (params.get('sa_error')) {
+            const errCode = params.get('sa_error');
+            window.history.replaceState({}, '', '/superadmin/backup');
+            const msgs = {
+                invalid_state: 'Connection failed: invalid or expired security token. Please try again.',
+                oauth_failed: 'Google OAuth failed. Please check your credentials and try again.',
+                no_refresh_token: 'Google did not return a refresh token. Please disconnect any existing access and try again.',
+            };
+            setSaNotification({ type: 'error', msg: msgs[errCode] || 'Google Drive connection failed.' });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const exportDb = async (format) => {
@@ -98,10 +125,12 @@ export default function SuperAdminBackup() {
         setSaGdriveLoading('connect');
         try {
             const res = await api.get('/superadmin/backup/gdrive/connect');
-            window.open(res.data.url, '_blank', 'width=600,height=700');
+            // Redirect the whole page to Google OAuth.
+            // Google will redirect back to GOOGLE_SA_REDIRECT_URI which then
+            // redirects to /superadmin/backup?sa_connected=true
+            window.location.href = res.data.url;
         } catch {
             console.error('Failed to start GDrive OAuth');
-        } finally {
             setSaGdriveLoading(null);
         }
     };
@@ -364,6 +393,22 @@ export default function SuperAdminBackup() {
                         </span>
                     )}
                 </div>
+
+                {/* OAuth result notification */}
+                {saNotification && (
+                    <div className={`flex items-start gap-3 p-3 rounded-lg border text-sm ${
+                        saNotification.type === 'success'
+                            ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                            : 'bg-red-500/10 border-red-500/30 text-red-400'
+                    }`}>
+                        {saNotification.type === 'success'
+                            ? <CheckCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                            : <AlertCircle className="w-4 h-4 mt-0.5 flex-shrink-0" />
+                        }
+                        <p className="flex-1">{saNotification.msg}</p>
+                        <button onClick={() => setSaNotification(null)} className="text-xs opacity-60 hover:opacity-100">✕</button>
+                    </div>
+                )}
 
                 <div className="flex flex-wrap gap-3">
                     {saGdrive.connected ? (

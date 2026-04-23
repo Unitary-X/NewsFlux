@@ -11,13 +11,22 @@ export default function Backup() {
     const [backups, setBackups] = useState([]);
     const [backupsLoading, setBackupsLoading] = useState(false);
     const [results, setResults] = useState(null);
+    const [notification, setNotification] = useState(null); // { type: 'success'|'error', msg: string }
 
-    // Check for OAuth callback redirect
+    // ─── Handle OAuth redirect parameters ───────────────────────────
     useEffect(() => {
         const params = new URLSearchParams(window.location.search);
         if (params.get('connected') === 'true') {
+            // Remove query string from URL bar without a page reload
             window.history.replaceState({}, '', '/admin/backup');
+            // Re-fetch drive status so UI reflects the new connection
+            fetchStatus();
+            setNotification({ type: 'success', msg: 'Google Drive connected successfully!' });
+        } else if (params.get('error')) {
+            window.history.replaceState({}, '', '/admin/backup');
+            setNotification({ type: 'error', msg: 'Google Drive connection failed. Please try again.' });
         }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
 
     const fetchStatus = useCallback(async () => {
@@ -99,6 +108,25 @@ export default function Backup() {
                 </h1>
                 <p className="text-slate-400 mt-1">{t('backup.subtitle')}</p>
             </div>
+
+            {/* OAuth Notification Banner */}
+            {notification && (
+                <div className={`flex items-start gap-3 p-4 rounded-xl border ${
+                    notification.type === 'success'
+                        ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                        : 'bg-red-500/10 border-red-500/30 text-red-400'
+                }`}>
+                    {notification.type === 'success'
+                        ? <Cloud className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                        : <AlertCircle className="w-5 h-5 mt-0.5 flex-shrink-0" />
+                    }
+                    <p className="text-sm font-medium flex-1">{notification.msg}</p>
+                    <button
+                        onClick={() => setNotification(null)}
+                        className="text-xs opacity-60 hover:opacity-100 flex-shrink-0"
+                    >✕</button>
+                </div>
+            )}
 
             {/* Connection Status Card */}
             <div className="bg-slate-800/50 border border-slate-700 rounded-xl p-6">
