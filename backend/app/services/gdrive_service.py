@@ -4,6 +4,9 @@ Uses the `drive.file` scope so the app can only access files it creates.
 """
 import json
 import logging
+import base64
+import hashlib
+import secrets
 from typing import Optional
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -47,12 +50,22 @@ def get_oauth_flow(redirect_uri: Optional[str] = None) -> Flow:
     return flow
 
 
-def get_authorization_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
-    """Build a Google OAuth2 authorization URL.
+def _generate_pkce_pair() -> tuple[str, str]:
+    """Generate a PKCE code_verifier + S256 code_challenge pair."""
+    code_verifier = secrets.token_urlsafe(64)
+    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+    return code_verifier, code_challenge
 
-    Args:
-        redirect_uri: Override the default redirect URI (e.g. super-admin callback).
-        state:        Optional CSRF-protection nonce to embed in the URL.
+
+def build_authorization_request(
+    redirect_uri: Optional[str] = None,
+    state: Optional[str] = None,
+    use_pkce: Optional[bool] = None,
+) -> dict:
+    """Build OAuth authorization request data.
+
+    Returns a dict with URL and optional code_verifier when PKCE is enabled.
     """
     flow = get_oauth_flow(redirect_uri=redirect_uri)
     kwargs: dict = {
@@ -62,14 +75,46 @@ def get_authorization_url(redirect_uri: Optional[str] = None, state: Optional[st
     }
     if state:
         kwargs["state"] = state
+
+    pkce_enabled = settings.GOOGLE_OAUTH_USE_PKCE if use_pkce is None else use_pkce
+    code_verifier = None
+    if pkce_enabled:
+        code_verifier, code_challenge = _generate_pkce_pair()
+        kwargs["code_challenge"] = code_challenge
+        kwargs["code_challenge_method"] = "S256"
+
     url, _ = flow.authorization_url(**kwargs)
-    return url
+    return {
+        "url": url,
+        "code_verifier": code_verifier,
+    }
 
 
-def exchange_code_for_tokens(code: str, redirect_uri: Optional[str] = None) -> dict:
+def get_authorization_url(redirect_uri: Optional[str] = None, state: Optional[str] = None) -> str:
+    """Build a Google OAuth2 authorization URL.
+
+    Args:
+        redirect_uri: Override the default redirect URI (e.g. super-admin callback).
+        state:        Optional CSRF-protection nonce to embed in the URL.
+    """
+    return build_authorization_request(
+        redirect_uri=redirect_uri,
+        state=state,
+        use_pkce=settings.GOOGLE_OAUTH_USE_PKCE,
+    )["url"]
+
+
+def exchange_code_for_tokens(
+    code: str,
+    redirect_uri: Optional[str] = None,
+    code_verifier: Optional[str] = None,
+) -> dict:
     """Exchange an authorization code for access + refresh tokens."""
     flow = get_oauth_flow(redirect_uri=redirect_uri)
-    flow.fetch_token(code=code)
+    fetch_kwargs = {"code": code}
+    if code_verifier:
+        fetch_kwargs["code_verifier"] = code_verifier
+    flow.fetch_token(**fetch_kwargs)
     creds = flow.credentials
     return {
         "access_token": creds.token,

@@ -21,6 +21,8 @@ class Settings(BaseSettings):
     GOOGLE_REDIRECT_URI: str = "http://localhost:8000/api/v1/backup/google/callback"
     # Super-admin OAuth callback (must also be registered in Google Cloud Console)
     GOOGLE_SA_REDIRECT_URI: str = "http://localhost:8000/api/v1/superadmin/backup/gdrive/callback"
+    # PKCE for OAuth code flow. Optional for confidential clients with client_secret.
+    GOOGLE_OAUTH_USE_PKCE: bool = True
     GDRIVE_ENABLED: bool = False
 
     # Email Configuration

@@ -63,13 +63,17 @@ export default function SuperAdminBackup() {
             setSaNotification({ type: 'success', msg: 'Google Drive connected to Super Admin successfully!' });
         } else if (params.get('sa_error')) {
             const errCode = params.get('sa_error');
+            const errDetail = params.get('sa_error_detail');
             window.history.replaceState({}, '', '/superadmin/backup');
             const msgs = {
                 invalid_state: 'Connection failed: invalid or expired security token. Please try again.',
                 oauth_failed: 'Google OAuth failed. Please check your credentials and try again.',
+                missing_code_verifier: 'OAuth failed: missing PKCE code verifier on callback. Please retry connection.',
                 no_refresh_token: 'Google did not return a refresh token. Please disconnect any existing access and try again.',
             };
-            setSaNotification({ type: 'error', msg: msgs[errCode] || 'Google Drive connection failed.' });
+            const baseMsg = msgs[errCode] || 'Google Drive connection failed.';
+            const fullMsg = errDetail ? `${baseMsg} Details: ${decodeURIComponent(errDetail)}` : baseMsg;
+            setSaNotification({ type: 'error', msg: fullMsg });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

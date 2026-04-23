@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict
 from uuid import UUID
 import uuid as uuid_mod
 from datetime import datetime, date, timedelta
+import logging
 
 from app.api.dependencies import get_db, require_role
 from app.models.models import (
@@ -17,8 +18,10 @@ from app.core.security import get_password_hash, create_access_token
 from app.core.metrics import collector
 from app.core.celery_app import celery_app
 from app.core.config import settings
+from urllib.parse import quote
 
 router = APIRouter()
+logger = logging.getLogger(__name__)
 
 # ═══════════════════════════════════════════════════════════════════
 # SCHEMAS
@@ -1239,12 +1242,30 @@ def sa_gdrive_connect(db: Session = Depends(get_db)):
         db.add(PlatformSettings(setting_key="sa_gdrive_oauth_state", setting_value=nonce))
     db.commit()
 
-    from app.services.gdrive_service import get_authorization_url
-    url = get_authorization_url(
+    from app.services.gdrive_service import build_authorization_request
+    auth_request = build_authorization_request(
         redirect_uri=settings.GOOGLE_SA_REDIRECT_URI,
         state=nonce,
+        use_pkce=settings.GOOGLE_OAUTH_USE_PKCE,
     )
-    return {"url": url}
+
+    # Persist PKCE verifier (when enabled) so callback can exchange the code.
+    verifier_setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_oauth_code_verifier"
+    ).first()
+    if auth_request.get("code_verifier"):
+        if verifier_setting:
+            verifier_setting.setting_value = auth_request["code_verifier"]
+        else:
+            db.add(PlatformSettings(
+                setting_key="sa_gdrive_oauth_code_verifier",
+                setting_value=auth_request["code_verifier"],
+            ))
+    elif verifier_setting:
+        db.delete(verifier_setting)
+    db.commit()
+
+    return {"url": auth_request["url"]}
 
 
 @router.get("/backup/gdrive/callback")
@@ -1261,6 +1282,9 @@ def sa_gdrive_callback(code: str, state: str = "", db: Session = Depends(get_db)
     sa_state_setting = db.query(PlatformSettings).filter(
         PlatformSettings.setting_key == "sa_gdrive_oauth_state"
     ).first()
+    sa_verifier_setting = db.query(PlatformSettings).filter(
+        PlatformSettings.setting_key == "sa_gdrive_oauth_code_verifier"
+    ).first()
 
     stored_state = sa_state_setting.setting_value if sa_state_setting else None
     if not stored_state or stored_state != state:
@@ -1268,19 +1292,34 @@ def sa_gdrive_callback(code: str, state: str = "", db: Session = Depends(get_db)
         from fastapi.responses import RedirectResponse
         return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_error=invalid_state")
 
-    # Consume the nonce immediately so it can't be replayed
+    # Consume nonce and verifier immediately so they can't be replayed.
     if sa_state_setting:
         db.delete(sa_state_setting)
+    code_verifier = sa_verifier_setting.setting_value if sa_verifier_setting else None
+    if sa_verifier_setting:
+        db.delete(sa_verifier_setting)
         db.commit()
+
+    if settings.GOOGLE_OAUTH_USE_PKCE and not code_verifier:
+        from fastapi.responses import RedirectResponse
+        return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_error=missing_code_verifier")
 
     from app.services.gdrive_service import exchange_code_for_tokens
     from app.core.security import encrypt_token
     from fastapi.responses import RedirectResponse
 
     try:
-        tokens = exchange_code_for_tokens(code, redirect_uri=settings.GOOGLE_SA_REDIRECT_URI)
-    except Exception:
-        return RedirectResponse(url=f"{frontend_url}/superadmin/backup?sa_error=oauth_failed")
+        tokens = exchange_code_for_tokens(
+            code,
+            redirect_uri=settings.GOOGLE_SA_REDIRECT_URI,
+            code_verifier=code_verifier,
+        )
+    except Exception as exc:
+        logger.exception("Super-admin Google OAuth token exchange failed")
+        err_detail = str(exc) or "oauth_token_exchange_failed"
+        return RedirectResponse(
+            url=f"{frontend_url}/superadmin/backup?sa_error=oauth_failed&sa_error_detail={quote(err_detail)}"
+        )
 
     if not tokens.get("refresh_token"):
         return RedirectResponse(
