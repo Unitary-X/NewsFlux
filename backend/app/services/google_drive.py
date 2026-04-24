@@ -3,6 +3,9 @@ import os
 import json
 import shutil
 import zipfile
+import base64
+import hashlib
+import secrets
 from datetime import datetime
 from typing import Optional, Dict, Tuple
 from pathlib import Path
@@ -50,21 +53,31 @@ class GoogleDriveService:
         flow.redirect_uri = self.redirect_uri
         return flow
 
-    def get_auth_url(self) -> Tuple[str, str]:
+    def _generate_pkce_pair(self) -> Tuple[str, str]:
+        """Generate PKCE verifier/challenge pair for OAuth code flow."""
+        code_verifier = secrets.token_urlsafe(64)
+        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
+        code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
+        return code_verifier, code_challenge
+
+    def get_auth_url(self) -> Tuple[str, str, str]:
         """
         Generate Google OAuth authorization URL
         
         Returns:
-            Tuple[str, str]: (authorization_url, state) for OAuth 2.0 flow
+            Tuple[str, str, str]: (authorization_url, state, code_verifier)
         """
         flow = self.get_oauth_flow()
+        code_verifier, code_challenge = self._generate_pkce_pair()
         auth_url, state = flow.authorization_url(
             access_type='offline',
-            include_granted_scopes='true'
+            include_granted_scopes='true',
+            code_challenge=code_challenge,
+            code_challenge_method='S256',
         )
-        return auth_url, state
+        return auth_url, state, code_verifier
 
-    def exchange_code_for_token(self, code: str, state: str) -> Dict:
+    def exchange_code_for_token(self, code: str, state: str, code_verifier: Optional[str] = None) -> Dict:
         """
         Exchange authorization code for access/refresh tokens
         
@@ -76,7 +89,10 @@ class GoogleDriveService:
             Dict containing credentials (access_token, refresh_token, expires_at)
         """
         flow = self.get_oauth_flow()
-        flow.fetch_token(code=code)
+        fetch_kwargs: Dict[str, str] = {"code": code}
+        if code_verifier:
+            fetch_kwargs["code_verifier"] = code_verifier
+        flow.fetch_token(**fetch_kwargs)
         credentials = flow.credentials
 
         return {

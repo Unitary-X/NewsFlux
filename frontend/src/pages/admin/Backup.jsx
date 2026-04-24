@@ -23,8 +23,16 @@ export default function Backup() {
             fetchStatus();
             setNotification({ type: 'success', msg: 'Google Drive connected successfully!' });
         } else if (params.get('error')) {
+            const errCode = params.get('error');
+            const errDetail = params.get('error_detail');
             window.history.replaceState({}, '', '/admin/backup');
-            setNotification({ type: 'error', msg: 'Google Drive connection failed. Please try again.' });
+            const msgs = {
+                oauth_failed: 'Google Drive connection failed. Please try again.',
+                missing_code_verifier: 'Google OAuth failed: missing PKCE code verifier. Please retry connection.',
+            };
+            const baseMsg = msgs[errCode] || 'Google Drive connection failed. Please try again.';
+            const fullMsg = errDetail ? `${baseMsg} Details: ${decodeURIComponent(errDetail)}` : baseMsg;
+            setNotification({ type: 'error', msg: fullMsg });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

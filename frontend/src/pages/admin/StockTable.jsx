@@ -609,11 +609,23 @@ export default function StockTable() {
                                                         className={`w-full p-2 border rounded-md focus:ring-2 outline-none text-center bg-blue-50/30 font-bold ${isOverLimit ? 'border-amber-400 focus:ring-amber-500' : 'border-slate-200 focus:ring-blue-500'}`}
                                                     />
                                                 </td>
-                                                <td className="px-6 py-4 text-center font-semibold text-slate-600 bg-slate-50/30">
-                                                    {entry.month_taken || 0}
+                                                <td className="px-6 py-4">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.month_taken || 0}
+                                                        onChange={(e) => handleWorkerStockChange(index, 'month_taken', parseInt(e.target.value) || 0)}
+                                                        className="w-full p-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-center font-semibold text-slate-700"
+                                                    />
                                                 </td>
-                                                <td className="px-6 py-4 text-center font-semibold text-slate-600 bg-slate-50/30">
-                                                    {entry.year_taken || 0}
+                                                <td className="px-6 py-4">
+                                                    <input
+                                                        type="number"
+                                                        min="0"
+                                                        value={entry.year_taken || 0}
+                                                        onChange={(e) => handleWorkerStockChange(index, 'year_taken', parseInt(e.target.value) || 0)}
+                                                        className="w-full p-2 border border-slate-200 rounded-md focus:ring-2 focus:ring-blue-500 outline-none text-center font-semibold text-slate-700"
+                                                    />
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <input

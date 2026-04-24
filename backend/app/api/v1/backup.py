@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import datetime
 import uuid
+from urllib.parse import quote
 
 from app.api.dependencies import get_db, require_role
 from app.models.models import Agency, Backup
@@ -87,11 +88,11 @@ def get_google_auth_url(request: Request, db: Session = Depends(get_db)):
 
     try:
         gdrive_service = GoogleDriveService()
-        auth_url, state = gdrive_service.get_auth_url()
+        auth_url, state, code_verifier = gdrive_service.get_auth_url()
 
         # Store state → tenant mapping so the callback can find the agency
         # We encode tenant_id + user_id in the state param stored in DB
-        agency.gdrive_oauth_state = f"{state}|{tid}|{user_id}"
+        agency.gdrive_oauth_state = f"{state}|{tid}|{user_id}|{code_verifier}"
         db.commit()
 
         return {"auth_url": auth_url, "state": state}
@@ -118,15 +119,20 @@ def google_oauth_callback(
         raise HTTPException(status_code=400, detail="Invalid or expired OAuth state")
 
     # Extract user_id from stored state
-    parts = (agency.gdrive_oauth_state or "").split("|")
+    parts = (agency.gdrive_oauth_state or "").split("|", 3)
     user_id = parts[2] if len(parts) >= 3 else None
+    code_verifier = parts[3] if len(parts) >= 4 else None
 
     # Clear state
     agency.gdrive_oauth_state = None
 
     try:
+        if not code_verifier:
+            frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"
+            return RedirectResponse(url=f"{frontend_url}/admin/backup?error=missing_code_verifier")
+
         gdrive_service = GoogleDriveService()
-        tokens = gdrive_service.exchange_code_for_token(code, state)
+        tokens = gdrive_service.exchange_code_for_token(code, state, code_verifier=code_verifier)
 
         drive = gdrive_service.get_drive_service(tokens['access_token'])
         backup_folder_id = gdrive_service.create_backup_folder(drive)
@@ -148,7 +154,8 @@ def google_oauth_callback(
 
     except Exception as e:
         frontend_url = settings.FRONTEND_URL if hasattr(settings, 'FRONTEND_URL') else "http://localhost:5173"
-        return RedirectResponse(url=f"{frontend_url}/admin/backup?error=oauth_failed")
+        err_detail = quote(str(e) or "oauth_failed")
+        return RedirectResponse(url=f"{frontend_url}/admin/backup?error=oauth_failed&error_detail={err_detail}")
 
 
 @router.post("/disconnect-google", dependencies=[Depends(require_role(["admin", "super_admin"]))])
