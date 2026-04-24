@@ -8,7 +8,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: newsflux
     ports:
-      - "5433:5432"
+      - "5434:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
 
@@ -16,7 +16,7 @@ services:
     image: redis:7-alpine
     container_name: newsflux_redis
     ports:
-      - "6379:6379"
+      - "6380:6379"
 
   backend:
     build:
@@ -28,7 +28,7 @@ services:
       - db
       - redis
     ports:
-      - "8000:8000"
+      - "18000:8000"
     env_file:
       - .env
     environment:
@@ -57,7 +57,7 @@ services:
       dockerfile: Dockerfile
     container_name: newsflux_spa
     ports:
-      - "80:80"
+      - "10006:80"
     depends_on:
       - backend
 
