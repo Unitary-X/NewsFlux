@@ -143,6 +143,8 @@ export default function StockTable() {
             worker_id: workers[0].id,
             newspaper_id: newspapers[0].id,
             taken: 0,
+            month_taken: 0,
+            year_taken: 0,
             returned: 0,
             amount_given: 0,
             date: date
@@ -162,6 +164,8 @@ export default function StockTable() {
                     newspaper_id: s.newspaper_id,
                     date: date,
                     taken: s.taken || 0,
+                    month_taken: s.month_taken ?? null,
+                    year_taken: s.year_taken ?? null,
                     returned: s.returned || 0,
                     amount_given: s.amount_given || 0
                 })

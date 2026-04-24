@@ -126,6 +126,8 @@ class WorkerStockEntry(BaseModel):
     newspaper_id: UUID
     date: date
     taken: int = 0
+    month_taken: Optional[int] = None
+    year_taken: Optional[int] = None
     returned: int = 0
     amount_given: float = 0.0
 

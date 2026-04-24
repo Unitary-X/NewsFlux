@@ -188,6 +188,8 @@ class WorkerDailyStock(Base):
     newspaper_id = Column(Uuid, ForeignKey("newspapers.id"), nullable=False)
     date = Column(Date, nullable=False)
     taken = Column(Integer, default=0)
+    month_taken = Column(Integer, nullable=True)
+    year_taken = Column(Integer, nullable=True)
     returned = Column(Integer, default=0)
     amount_given = Column(DECIMAL(10, 2), default=0.00)  # cash collected from worker
 

@@ -1128,8 +1128,8 @@ def get_worker_stock(request: Request, target_date: str = None, db: Session = De
             "paper_type": paper_type_map.get(str(e.newspaper_id), "daily"),
             "date": str(e.date),
             "taken": e.taken or 0,
-            "month_taken": int(month_taken),
-            "year_taken": int(year_taken),
+            "month_taken": int(e.month_taken) if e.month_taken is not None else int(month_taken),
+            "year_taken": int(e.year_taken) if e.year_taken is not None else int(year_taken),
             "returned": e.returned or 0,
             "sold": (e.taken or 0) - (e.returned or 0),
             "amount_given": float(e.amount_given) if e.amount_given else 0.0,
@@ -1155,6 +1155,8 @@ def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = 
     ).first()
     if existing:
         existing.taken = data.taken
+        existing.month_taken = data.month_taken
+        existing.year_taken = data.year_taken
         existing.returned = data.returned
         existing.amount_given = data.amount_given
     else:
@@ -1164,6 +1166,8 @@ def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = 
             newspaper_id=nid,
             date=data.date,
             taken=data.taken,
+            month_taken=data.month_taken,
+            year_taken=data.year_taken,
             returned=data.returned,
             amount_given=data.amount_given,
         ))
