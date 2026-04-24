@@ -1,65 +1,164 @@
+version: "3.8"
+
 services:
   db:
     image: postgres:15-alpine
     container_name: newsflux_postgres
-    restart: always
+    restart: unless-stopped
     environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-      POSTGRES_DB: newsflux
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-newsflux}
     ports:
-      - "5434:5432"
+      - "${DB_PORT:-5434}:5432"
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ${DATA_ROOT:-/mnt/tank/docker-data}/db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres} -d ${POSTGRES_DB:-newsflux}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    networks:
+      - newsflux-network
 
   redis:
     image: redis:7-alpine
     container_name: newsflux_redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6380:6379"
+      - "${REDIS_PORT:-6380}:6379"
+    volumes:
+      - ${DATA_ROOT:-/mnt/tank/docker-data}/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    networks:
+      - newsflux-network
 
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: newsflux_api
-    restart: always
+    restart: unless-stopped
     depends_on:
-      - db
-      - redis
-    ports:
-      - "18000:8000"
-    env_file:
-      - .env
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
-      # Override DATABASE_URL so the backend talks to the db container, not localhost
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/newsflux
-      - REDIS_URL=redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-to-32-plus-characters}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-newsflux}
+      REDIS_URL: redis://redis:6379/0
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-15}
+      REFRESH_TOKEN_EXPIRE_DAYS: ${REFRESH_TOKEN_EXPIRE_DAYS:-30}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${WEB_PORT:-10006}}
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-support@newsflux.app}
+      GDRIVE_ENABLED: ${GDRIVE_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:${API_PORT:-18000}/api/v1/backup/google/callback}
+      GOOGLE_SA_REDIRECT_URI: ${GOOGLE_SA_REDIRECT_URI:-http://localhost:${API_PORT:-18000}/api/v1/superadmin/backup/gdrive/callback}
+      GOOGLE_OAUTH_USE_PKCE: ${GOOGLE_OAUTH_USE_PKCE:-true}
+      EMAILS_ENABLED: ${EMAILS_ENABLED:-false}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@newsflux.app}
+      REQUEST_TIMEOUT_SHORT: ${REQUEST_TIMEOUT_SHORT:-5}
+      REQUEST_TIMEOUT_MEDIUM: ${REQUEST_TIMEOUT_MEDIUM:-15}
+      REQUEST_TIMEOUT_LONG: ${REQUEST_TIMEOUT_LONG:-30}
+    ports:
+      - "${API_PORT:-18000}:8000"
+    volumes:
+      - ${DATA_ROOT:-/mnt/tank/docker-data}/backend:/tmp/newsflux_backups
+    healthcheck:
+      test: ["CMD-SHELL", "python -c \"import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3)\""]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 40s
+    labels:
+      traefik.enable: ${TRAEFIK_ENABLE_BACKEND:-false}
+      traefik.http.routers.newsflux-api.rule: Host(`${API_HOST:-api.localhost}`)
+      traefik.http.routers.newsflux-api.entrypoints: ${TRAEFIK_ENTRYPOINTS:-web}
+      traefik.http.services.newsflux-api.loadbalancer.server.port: "8000"
+    networks:
+      - newsflux-network
 
   celery_worker:
     build:
       context: ./backend
       dockerfile: Dockerfile
     container_name: newsflux_celery
-    command: celery -A app.core.celery_app worker --loglevel=info
+    restart: unless-stopped
+    command: celery -A app.core.celery_app worker --loglevel=${CELERY_LOG_LEVEL:-info}
     depends_on:
-      - db
-      - redis
-    env_file:
-      - .env
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      backend:
+        condition: service_healthy
     environment:
-      - DATABASE_URL=postgresql://postgres:postgres@db:5432/newsflux
-      - REDIS_URL=redis://redis:6379/0
+      ENVIRONMENT: ${ENVIRONMENT:-production}
+      SECRET_KEY: ${SECRET_KEY:-change-this-secret-key-to-32-plus-characters}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-postgres}:${POSTGRES_PASSWORD:-postgres}@db:5432/${POSTGRES_DB:-newsflux}
+      REDIS_URL: redis://redis:6379/0
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:${WEB_PORT:-10006}}
+      GDRIVE_ENABLED: ${GDRIVE_ENABLED:-false}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-http://localhost:${API_PORT:-18000}/api/v1/backup/google/callback}
+      GOOGLE_SA_REDIRECT_URI: ${GOOGLE_SA_REDIRECT_URI:-http://localhost:${API_PORT:-18000}/api/v1/superadmin/backup/gdrive/callback}
+      GOOGLE_OAUTH_USE_PKCE: ${GOOGLE_OAUTH_USE_PKCE:-true}
+      EMAILS_ENABLED: ${EMAILS_ENABLED:-false}
+      SMTP_SERVER: ${SMTP_SERVER:-smtp.gmail.com}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASSWORD: ${SMTP_PASSWORD:-}
+      SMTP_FROM_EMAIL: ${SMTP_FROM_EMAIL:-noreply@newsflux.app}
+      REQUEST_TIMEOUT_SHORT: ${REQUEST_TIMEOUT_SHORT:-5}
+      REQUEST_TIMEOUT_MEDIUM: ${REQUEST_TIMEOUT_MEDIUM:-15}
+      REQUEST_TIMEOUT_LONG: ${REQUEST_TIMEOUT_LONG:-30}
+    volumes:
+      - ${DATA_ROOT:-/mnt/tank/docker-data}/backend:/tmp/newsflux_backups
+    networks:
+      - newsflux-network
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
     container_name: newsflux_spa
-    ports:
-      - "10006:80"
+    restart: unless-stopped
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
+    ports:
+      - "${WEB_PORT:-10006}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    labels:
+      traefik.enable: ${TRAEFIK_ENABLE_FRONTEND:-false}
+      traefik.http.routers.newsflux-web.rule: Host(`${WEB_HOST:-newsflux.localhost}`)
+      traefik.http.routers.newsflux-web.entrypoints: ${TRAEFIK_ENTRYPOINTS:-web}
+      traefik.http.services.newsflux-web.loadbalancer.server.port: "80"
+    networks:
+      - newsflux-network
 
-volumes:
-  postgres_data:
+networks:
+  newsflux-network:
+    name: ${DOCKER_NETWORK_NAME:-newsflux-network}
+    driver: bridge
