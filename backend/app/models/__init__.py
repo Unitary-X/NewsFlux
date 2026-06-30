@@ -13,5 +13,6 @@ from .models import (
     PlatformSettings,
     DailyDelivery,
     Backup,
+    ExtraExpense,
 )
 

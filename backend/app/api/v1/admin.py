@@ -429,6 +429,7 @@ def save_worker_stock(request: Request, data: List[WorkerStockEntry], db: Sessio
             existing.taken = entry.taken
             existing.returned = entry.returned
             existing.amount_given = entry.amount_given
+            existing.sold = entry.sold
         else:
             new_entry = WorkerDailyStock(
                 tenant_id=tid,
@@ -437,7 +438,8 @@ def save_worker_stock(request: Request, data: List[WorkerStockEntry], db: Sessio
                 date=entry.date,
                 taken=entry.taken,
                 returned=entry.returned,
-                amount_given=entry.amount_given
+                amount_given=entry.amount_given,
+                sold=entry.sold
             )
             db.add(new_entry)
             
@@ -1175,6 +1177,7 @@ def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = 
         existing.year_taken = data.year_taken
         existing.returned = data.returned
         existing.amount_given = data.amount_given
+        existing.sold = data.sold
     else:
         db.add(WorkerDailyStock(
             tenant_id=tid,
@@ -1186,6 +1189,7 @@ def upsert_worker_stock(request: Request, data: WorkerStockEntry, db: Session = 
             year_taken=data.year_taken,
             returned=data.returned,
             amount_given=data.amount_given,
+            sold=data.sold,
         ))
     db.commit()
     return {"status": "success"}
@@ -1494,3 +1498,42 @@ def list_backup_files_endpoint(subfolder: str, request: Request, db: Session = D
     from app.services.gdrive_service import list_backup_files
     files = list_backup_files(agency.gdrive_refresh_token, agency.name, folder_name)
     return files
+
+# ──────────────────────────────────────────────
+# EXTRA EXPENSE
+# ──────────────────────────────────────────────
+from app.models.models import ExtraExpense
+from app.schemas.admin import ExtraExpenseBulkUpdate
+
+@router.get("/extra-expense/{target_date}", dependencies=[Depends(require_role(["admin"]))])
+def get_extra_expense(request: Request, target_date: str, db: Session = Depends(get_db)):
+    expenses = db.query(ExtraExpense).filter(
+        ExtraExpense.tenant_id == request.state.tenant_id,
+        ExtraExpense.date == target_date
+    ).all()
+    return expenses
+
+@router.post("/extra-expense", dependencies=[Depends(require_role(["admin"]))])
+def update_extra_expense(request: Request, payload: ExtraExpenseBulkUpdate, db: Session = Depends(get_db)):
+    tenant_id = request.state.tenant_id
+    
+    # Delete existing entries for the date
+    db.query(ExtraExpense).filter(
+        ExtraExpense.tenant_id == tenant_id,
+        ExtraExpense.date == payload.date
+    ).delete()
+    
+    # Add new entries
+    for entry in payload.entries:
+        if entry.area or entry.packages > 0 or entry.cost_per_package > 0: # only save if not completely empty
+            new_expense = ExtraExpense(
+                tenant_id=tenant_id,
+                date=payload.date,
+                area=entry.area,
+                packages=entry.packages,
+                cost_per_package=entry.cost_per_package
+            )
+            db.add(new_expense)
+            
+    db.commit()
+    return {"status": "success"}

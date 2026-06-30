@@ -5,7 +5,7 @@
         "username": "Username",
         "password": "Password",
         "submit": "Sign In",
-        "error": "Invalid credentials",
+        "error": "Network error or Server offline",
         "logging_in": "Signing In...",
         "forgot_password": "Forgot Password?"
     },

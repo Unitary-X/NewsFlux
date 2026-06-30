@@ -5,7 +5,9 @@ import Login from './pages/Login';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import AdminDashboard from './pages/admin/Dashboard';
-import StockTable from './pages/admin/StockTable';
+import DailyStockLedger from './pages/admin/DailyStockLedger';
+import WorkerDailyLedger from './pages/admin/WorkerDailyLedger';
+import ExtraExpense from './pages/admin/ExtraExpense';
 import Newspapers from './pages/admin/Newspapers';
 import Customers from './pages/admin/Customers';
 import Subscriptions from './pages/admin/Subscriptions';
@@ -64,7 +66,9 @@ function App() {
             }
           >
             <Route index element={<AdminDashboard />} />
-            <Route path="stock" element={<StockTable />} />
+            <Route path="stock/daily" element={<DailyStockLedger />} />
+            <Route path="stock/worker" element={<WorkerDailyLedger />} />
+            <Route path="stock/expense" element={<ExtraExpense />} />
             <Route path="newspapers" element={<Newspapers />} />
             <Route path="customers" element={<Customers />} />
             <Route path="subscriptions" element={<Subscriptions />} />

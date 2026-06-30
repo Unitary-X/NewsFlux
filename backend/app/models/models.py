@@ -193,7 +193,14 @@ class WorkerDailyStock(Base):
     year_taken = Column(Integer, nullable=True)
     returned = Column(Integer, default=0)
     amount_given = Column(DECIMAL(10, 2), default=0.00)  # cash collected from worker
+    sold = Column(Integer, default=0)
 
-    @property
-    def sold(self):
-        return (self.taken or 0) - (self.returned or 0)
+class ExtraExpense(Base):
+    __tablename__ = "extra_expenses"
+    id = Column(Uuid, primary_key=True, default=uuid.uuid4)
+    tenant_id = Column(Uuid, ForeignKey("agencies.id"), nullable=False)
+    date = Column(Date, nullable=False)
+    area = Column(String(255), nullable=True)
+    packages = Column(Integer, default=0)
+    cost_per_package = Column(DECIMAL(10, 2), default=0.00)
+    created_at = Column(DateTime, default=datetime.utcnow)

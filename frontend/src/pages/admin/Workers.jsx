@@ -23,6 +23,10 @@ export default function Workers() {
     const [ledgerLoading, setLedgerLoading] = useState(false);
     const [savingRows, setSavingRows] = useState({});
 
+    // Inline area editing in ledger
+    const [editingAreas, setEditingAreas] = useState({});
+    const [savingAreas, setSavingAreas] = useState({});
+
     // Per-worker all-time summaries
     const [summaries, setSummaries] = useState({});
 
@@ -149,6 +153,22 @@ export default function Workers() {
             alert('Failed to save entry');
         } finally {
             setSavingRows(prev => ({ ...prev, [key]: false }));
+        }
+    };
+
+    const updateWorkerArea = async (workerId, newArea) => {
+        const worker = workers.find(w => w.id === workerId);
+        if (!worker || worker.area === newArea) return;
+        setSavingAreas(prev => ({ ...prev, [workerId]: true }));
+        try {
+            await api.put(`/admin/workers/${workerId}`, { area: newArea });
+            setWorkers(prev => prev.map(w => w.id === workerId ? { ...w, area: newArea } : w));
+        } catch {
+            alert('Failed to update area');
+            // revert the editing state to the original value
+            setEditingAreas(prev => ({ ...prev, [workerId]: worker.area || '' }));
+        } finally {
+            setSavingAreas(prev => ({ ...prev, [workerId]: false }));
         }
     };
 
@@ -509,11 +529,31 @@ export default function Workers() {
                                                             <span className="font-medium text-slate-700">{w.username}</span>
                                                         </div>
                                                     </td>
-                                                    {/* Area */}
+                                                    {/* Area (editable) */}
                                                     <td className="px-4 py-2.5">
-                                                        <span className="text-sm text-purple-600 font-medium">
-                                                            {w.area || <span className="text-slate-300 italic">&mdash;</span>}
-                                                        </span>
+                                                        <div className="relative">
+                                                            <input
+                                                                type="text"
+                                                                value={editingAreas[w.id] !== undefined ? editingAreas[w.id] : (w.area || '')}
+                                                                onChange={e => setEditingAreas(prev => ({ ...prev, [w.id]: e.target.value }))}
+                                                                onBlur={e => {
+                                                                    const val = e.target.value.trim();
+                                                                    updateWorkerArea(w.id, val);
+                                                                    setEditingAreas(prev => { const n = { ...prev }; delete n[w.id]; return n; });
+                                                                }}
+                                                                onKeyDown={e => {
+                                                                    if (e.key === 'Enter') {
+                                                                        e.target.blur();
+                                                                    }
+                                                                }}
+                                                                placeholder="Set area…"
+                                                                disabled={savingAreas[w.id]}
+                                                                className="w-28 text-sm text-purple-600 font-medium bg-white border border-purple-200 rounded-lg px-2.5 py-1 focus:ring-2 focus:ring-purple-400 focus:border-purple-400 outline-none transition-all placeholder:text-slate-300 placeholder:italic disabled:opacity-50"
+                                                            />
+                                                            {savingAreas[w.id] && (
+                                                                <Loader2 className="absolute right-1.5 top-1/2 -translate-y-1/2 w-3 h-3 animate-spin text-purple-400" />
+                                                            )}
+                                                        </div>
                                                     </td>
                                                     {/* Newspaper */}
                                                     <td className="px-4 py-2.5 text-slate-600 font-medium">{p.name}</td>

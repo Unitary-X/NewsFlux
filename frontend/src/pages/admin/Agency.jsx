@@ -340,17 +340,7 @@ export default function Agency() {
                                     <input type="date" value={ledgerDate} onChange={e => setLedgerDate(e.target.value)}
                                         className="pl-8 pr-3 py-1.5 bg-slate-50 border border-slate-200 rounded-lg text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
                                 </div>
-                            ) : (
-                                <button
-                                    onClick={() => { setShowForm(v => !v); setEditId(null); }}
-                                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
-                                        showForm ? 'bg-slate-200 text-slate-700' : 'bg-indigo-600 text-white hover:bg-indigo-700'
-                                    }`}
-                                >
-                                    {showForm ? <X className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
-                                    {showForm ? 'Cancel' : 'Add Worker'}
-                                </button>
-                            )
+                            ) : null
                         ) : (
                             <>
                                 <div className="relative">
@@ -632,25 +622,6 @@ export default function Agency() {
                 {/* â”€â”€ WORKERS â”€â”€ */}
                 {activeTab === 'workers' && (
                     <div>
-                        {/* Add worker form */}
-                        {showForm && (
-                            <form onSubmit={addWorker} className="border-b border-slate-200 bg-slate-50 px-6 py-4 flex items-end gap-4 flex-wrap">
-                                <div className="flex-1 min-w-40">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Username</label>
-                                    <input value={workerForm.username} onChange={e => setWorkerForm(p => ({ ...p, username: e.target.value }))} required placeholder="e.g. worker_ravi"
-                                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                </div>
-                                <div className="flex-1 min-w-40">
-                                    <label className="block text-xs font-semibold text-slate-600 mb-1">Password</label>
-                                    <input type="password" value={workerForm.password} onChange={e => setWorkerForm(p => ({ ...p, password: e.target.value }))} required minLength={6} placeholder="Min 6 characters"
-                                        className="w-full bg-white border border-slate-200 rounded-lg px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-500 outline-none" />
-                                </div>
-                                <button type="submit" disabled={submitting}
-                                    className="flex items-center gap-1.5 px-4 py-2 bg-indigo-600 text-white rounded-lg text-sm font-medium hover:bg-indigo-700 transition-colors disabled:opacity-60">
-                                    {submitting ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Plus className="w-3.5 h-3.5" />} Create Worker
-                                </button>
-                            </form>
-                        )}
 
                         {/* Worker list */}
                         {workers.length === 0 ? (

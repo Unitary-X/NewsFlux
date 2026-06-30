@@ -136,7 +136,27 @@ class WorkerStockEntry(BaseModel):
     year_taken: Optional[int] = None
     returned: int = 0
     amount_given: float = 0.0
+    sold: int = 0
 
 class WorkerStockBulkUpdate(BaseModel):
     date: date
     entries: List[WorkerStockEntry]
+
+# --- EXTRA EXPENSE ---
+class ExtraExpenseEntry(BaseModel):
+    area: Optional[str] = None
+    packages: int = 0
+    cost_per_package: float = 0.0
+
+class ExtraExpenseBulkUpdate(BaseModel):
+    date: date
+    entries: List[ExtraExpenseEntry]
+
+class ExtraExpenseResponse(BaseModel):
+    id: UUID
+    tenant_id: UUID
+    date: date
+    area: Optional[str] = None
+    packages: int = 0
+    cost_per_package: float = 0.0
+    model_config = ConfigDict(from_attributes=True)
