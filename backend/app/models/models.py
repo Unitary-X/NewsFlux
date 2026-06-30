@@ -24,6 +24,7 @@ class User(Base):
     username = Column(String(100), unique=True, nullable=False)
     password_hash = Column(String(255), nullable=False)
     phone = Column(String(20), nullable=True)
+    area = Column(String(255), nullable=True)  # Delivery area assignment for workers
 
 class Newspaper(Base):
     __tablename__ = "newspapers"

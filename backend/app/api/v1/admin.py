@@ -20,7 +20,7 @@ from app.schemas.admin import (
     SubscriptionCreate, SubscriptionUpdate, SubscriptionResponse,
     InvoiceResponse, GenerateBillsRequest,
     PricingGridUpdate,
-    WorkerCreate, WorkerResponse, WorkerStockEntry,
+    WorkerCreate, WorkerUpdate, WorkerResponse, WorkerStockEntry,
 )
 from app.core.security import get_password_hash
 
@@ -159,16 +159,21 @@ def stock_summary(request: Request, target_date: str = None, db: Session = Depen
     result = []
     for s in stocks:
         paper = papers.get(str(s.newspaper_id))
-        sold = (s.taken or 0) - (s.returned or 0)
+        taken = s.taken or 0
+        returned = s.returned or 0
+        sold = taken - returned
+        base_price = float(paper.base_price) if paper else 0
+        return_loss = round(returned * base_price, 2)
         result.append({
             "newspaper_id": str(s.newspaper_id),
             "newspaper_name": paper.name if paper else "Unknown",
             "paper_type": paper.paper_type if paper else "daily",
-            "base_price": float(paper.base_price) if paper else 0,
-            "taken": s.taken or 0,
-            "returned": s.returned or 0,
+            "base_price": base_price,
+            "taken": taken,
+            "returned": returned,
             "sold": sold,
-            "revenue": round(sold * float(paper.base_price), 2) if paper else 0,
+            "revenue": round(sold * base_price, 2),
+            "return_loss": return_loss,
         })
     return result
 
@@ -1066,6 +1071,7 @@ def create_worker(request: Request, data: WorkerCreate, db: Session = Depends(ge
         password_hash=get_password_hash(password),
         role=data.role or "worker",
         phone=data.phone,
+        area=data.area,
         tenant_id=tid,
     )
     db.add(worker)
@@ -1092,10 +1098,13 @@ def get_worker_stock(request: Request, target_date: str = None, db: Session = De
         WorkerDailyStock.date == d_str
     ).all()
     
-    worker_map = {str(w.id): w.username for w in db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()}
+    worker_rows = db.query(User).filter(User.tenant_id == tid, User.role == "worker").all()
+    worker_map = {str(w.id): w.username for w in worker_rows}
+    worker_area_map = {str(w.id): w.area for w in worker_rows}
     np_rows = db.query(Newspaper).filter(Newspaper.tenant_id == tid).all()
     paper_map = {str(p.id): p.name for p in np_rows}
     paper_type_map = {str(p.id): p.paper_type for p in np_rows}
+    paper_price_map = {str(p.id): float(p.base_price) for p in np_rows}
     
     # Calculate cumulative counts for the specific (worker, paper) pairs found today
     # to avoid pulling the entire table if possible, but let's just do a focused query.
@@ -1119,19 +1128,26 @@ def get_worker_stock(request: Request, target_date: str = None, db: Session = De
             WorkerDailyStock.date <= d_obj
         ).scalar() or 0
 
+        returned = e.returned or 0
+        taken = e.taken or 0
+        base_price = paper_price_map.get(str(e.newspaper_id), 0)
+        return_loss = round(returned * base_price, 2)
         results.append({
             "id": str(e.id),
             "worker_id": str(e.worker_id),
             "worker_name": worker_map.get(str(e.worker_id), "Unknown"),
+            "worker_area": worker_area_map.get(str(e.worker_id), None),
             "newspaper_id": str(e.newspaper_id),
             "newspaper_name": paper_map.get(str(e.newspaper_id), "Unknown"),
             "paper_type": paper_type_map.get(str(e.newspaper_id), "daily"),
+            "base_price": base_price,
             "date": str(e.date),
-            "taken": e.taken or 0,
+            "taken": taken,
             "month_taken": int(e.month_taken) if e.month_taken is not None else int(month_taken),
             "year_taken": int(e.year_taken) if e.year_taken is not None else int(year_taken),
-            "returned": e.returned or 0,
-            "sold": (e.taken or 0) - (e.returned or 0),
+            "returned": returned,
+            "sold": taken - returned,
+            "return_loss": return_loss,
             "amount_given": float(e.amount_given) if e.amount_given else 0.0,
         })
     return results
@@ -1244,6 +1260,23 @@ def get_worker_summary(request: Request, worker_id: str, db: Session = Depends(g
     }
     
     return summary
+
+
+@router.put("/workers/{worker_id}", response_model=WorkerResponse, dependencies=[Depends(require_role(["admin"]))])
+def update_worker(request: Request, worker_id: str, data: WorkerUpdate, db: Session = Depends(get_db)):
+    """Update a worker's phone and/or area."""
+    tid = request.state.tenant_id
+    uid = _parse_uuid(worker_id)
+    worker = db.query(User).filter(User.id == uid, User.tenant_id == tid, User.role == "worker").first()
+    if not worker:
+        raise HTTPException(status_code=404, detail="Worker not found")
+    if data.phone is not None:
+        worker.phone = data.phone
+    if data.area is not None:
+        worker.area = data.area
+    db.commit()
+    db.refresh(worker)
+    return worker
 
 
 @router.delete("/workers/{worker_id}", dependencies=[Depends(require_role(["admin"]))])

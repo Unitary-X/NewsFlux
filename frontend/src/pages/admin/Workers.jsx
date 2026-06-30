@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import {
     Users, Plus, Trash2, X, Loader2, RefreshCw,
     Calendar, Save, Package, IndianRupee, TrendingUp,
-    User, ShieldCheck, Phone,
+    User, ShieldCheck, Phone, MapPin,
 } from 'lucide-react';
 import api from '../../utils/api';
 
@@ -14,7 +14,7 @@ export default function Workers() {
 
     // Add worker form
     const [showAddForm, setShowAddForm] = useState(false);
-    const [workerForm, setWorkerForm] = useState({ username: '', role: 'worker', phone: '' });
+    const [workerForm, setWorkerForm] = useState({ username: '', role: 'worker', phone: '', area: '' });
     const [submitting, setSubmitting] = useState(false);
 
     // Daily ledger
@@ -95,7 +95,7 @@ export default function Workers() {
         setSubmitting(true);
         try {
             await api.post('/admin/workers', workerForm);
-            setWorkerForm({ username: '', role: 'worker', phone: '' });
+            setWorkerForm({ username: '', role: 'worker', phone: '', area: '' });
             setShowAddForm(false);
             loadData();
         } catch (err) {
@@ -322,6 +322,18 @@ export default function Workers() {
                                 />
                             </div>
                         </div>
+                        <div className="flex-1 min-w-[200px]">
+                            <label className="block text-xs font-bold text-slate-500 uppercase tracking-wider mb-2">Delivery Area</label>
+                            <div className="relative">
+                                <MapPin className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+                                <input
+                                    value={workerForm.area}
+                                    onChange={e => setWorkerForm(p => ({ ...p, area: e.target.value }))}
+                                    placeholder="e.g. North Zone"
+                                    className="w-full bg-white border border-slate-200 rounded-xl pl-10 pr-4 py-2.5 text-sm focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 outline-none transition-all"
+                                />
+                            </div>
+                        </div>
                         <button
                             type="submit"
                             disabled={submitting}
@@ -360,6 +372,12 @@ export default function Workers() {
                                                             {w.role || 'Worker'}
                                                         </span>
                                                         {w.phone && <span className="text-[11px] text-slate-400 font-medium">{w.phone}</span>}
+                                                        {w.area && (
+                                                            <span className="text-[10px] uppercase font-bold text-purple-600 bg-purple-50 px-1.5 py-0.5 rounded border border-purple-100 flex items-center gap-0.5">
+                                                                <MapPin className="w-2.5 h-2.5" />
+                                                                {w.area}
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
                                             </div>
@@ -464,6 +482,7 @@ export default function Workers() {
                                 <thead>
                                     <tr className="bg-slate-50 border-b border-slate-200">
                                         <th className="text-left px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Worker</th>
+                                        <th className="text-left px-4 py-3 font-semibold text-purple-600 whitespace-nowrap">Area</th>
                                         <th className="text-left px-4 py-3 font-semibold text-slate-600 whitespace-nowrap">Newspaper</th>
                                         <th className="text-center px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Taken</th>
                                         <th className="text-center px-3 py-3 font-semibold text-slate-600 whitespace-nowrap">Returned</th>
@@ -489,6 +508,12 @@ export default function Workers() {
                                                             </div>
                                                             <span className="font-medium text-slate-700">{w.username}</span>
                                                         </div>
+                                                    </td>
+                                                    {/* Area */}
+                                                    <td className="px-4 py-2.5">
+                                                        <span className="text-sm text-purple-600 font-medium">
+                                                            {w.area || <span className="text-slate-300 italic">&mdash;</span>}
+                                                        </span>
                                                     </td>
                                                     {/* Newspaper */}
                                                     <td className="px-4 py-2.5 text-slate-600 font-medium">{p.name}</td>

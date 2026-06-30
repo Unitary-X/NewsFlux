@@ -113,12 +113,18 @@ class WorkerCreate(BaseModel):
     password: Optional[str] = None
     role: str = "worker"
     phone: Optional[str] = None
+    area: Optional[str] = None
+
+class WorkerUpdate(BaseModel):
+    phone: Optional[str] = None
+    area: Optional[str] = None
 
 class WorkerResponse(BaseModel):
     id: UUID
     username: str
     role: str
     phone: Optional[str] = None
+    area: Optional[str] = None
     model_config = ConfigDict(from_attributes=True)
 
 class WorkerStockEntry(BaseModel):

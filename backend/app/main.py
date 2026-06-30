@@ -47,6 +47,16 @@ async def lifespan(app: FastAPI):
         import app.models.models  # noqa: ensure models are registered
         Base.metadata.create_all(bind=engine)
         logger.info("SQLite tables created")
+        
+        # Add new columns to existing tables (simple migration for SQLite dev)
+        from sqlalchemy import text as sa_text
+        with engine.connect() as conn:
+            try:
+                conn.execute(sa_text("ALTER TABLE users ADD COLUMN area VARCHAR(255)"))
+                conn.commit()
+                logger.info("Added 'area' column to users table")
+            except Exception:
+                pass  # Column already exists
     
     # Initialize the core  database schema records on startup
     init_db()

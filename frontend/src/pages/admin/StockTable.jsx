@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import api from '../../utils/api';
-import { Save, Loader2, Calendar, AlertTriangle, User, Plus, Trash2, IndianRupee, Phone, ShieldCheck, UserPlus } from 'lucide-react';
+import { Save, Loader2, Calendar, AlertTriangle, User, Plus, Trash2, IndianRupee, Phone, ShieldCheck, UserPlus, MapPin, TrendingDown } from 'lucide-react';
 import { TableSkeleton } from '../../components/Skeleton';
 
 export default function StockTable() {
@@ -250,6 +250,14 @@ export default function StockTable() {
         return sum + sold * Number(paper.base_price);
     }, 0);
 
+    const totalReturnLoss = newspapers.reduce((sum, paper) => {
+        const s = stock[paper.id] || { taken: 0, returned: 0 };
+        const returned = s.returned || 0;
+        return sum + returned * Number(paper.base_price);
+    }, 0);
+
+    const dailyProfit = totalIncome - totalReturnLoss;
+
     // Validation: daily + monthly + yearly must equal total taken
     const breakdownSum = breakdown.daily + breakdown.monthly + breakdown.yearly;
     const isBalanced = breakdownSum === tableTotalTaken;
@@ -388,6 +396,7 @@ export default function StockTable() {
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-48">Quantity Returned</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm hidden md:table-cell text-right">Sold (Net)</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-40 text-right">Income</th>
+                                    <th className="px-6 py-4 font-semibold text-red-600 tracking-wide text-sm w-40 text-right">Return Loss</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-100">
@@ -435,13 +444,23 @@ export default function StockTable() {
                                                     ₹{income.toFixed(2)}
                                                 </span>
                                             </td>
+                                            <td className="px-6 py-4 text-right">
+                                                {(() => {
+                                                    const returnLoss = (currentStock.returned || 0) * Number(paper.base_price);
+                                                    return (
+                                                        <span className={`inline-flex items-center justify-center font-semibold text-lg ${returnLoss > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                            ₹{returnLoss.toFixed(2)}
+                                                        </span>
+                                                    );
+                                                })()}
+                                            </td>
                                         </tr>
                                     )
                                 })}
                             </tbody>
                             <tfoot>
                                 <tr className="bg-gradient-to-r from-slate-50 to-blue-50 border-t-2 border-slate-200">
-                                    <td colSpan="4" className="px-6 py-3 text-right">
+                                    <td colSpan="5" className="px-6 py-3 text-right">
                                         <span className="text-sm font-bold text-slate-500 uppercase tracking-wider">Daily Generated Income:</span>
                                     </td>
                                     <td className="px-6 py-3 text-right">
@@ -451,12 +470,32 @@ export default function StockTable() {
                                     </td>
                                 </tr>
                                 <tr className="bg-gradient-to-r from-blue-50 to-emerald-50 border-t border-blue-200">
-                                    <td colSpan="4" className="px-6 py-4 text-right">
+                                    <td colSpan="5" className="px-6 py-4 text-right">
                                         <span className="text-lg font-bold text-slate-700 uppercase tracking-wide">Total Income:</span>
                                     </td>
                                     <td className="px-6 py-4 text-right">
                                         <span className="inline-flex items-center justify-center text-2xl font-black text-emerald-600">
                                             ₹{totalIncome.toFixed(2)}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr className="bg-gradient-to-r from-red-50 to-orange-50 border-t border-red-200">
+                                    <td colSpan="5" className="px-6 py-3 text-right">
+                                        <span className="text-sm font-bold text-red-500 uppercase tracking-wider">Total Return Loss:</span>
+                                    </td>
+                                    <td className="px-6 py-3 text-right">
+                                        <span className="font-bold text-red-500 text-lg">
+                                            -₹{totalReturnLoss.toFixed(2)}
+                                        </span>
+                                    </td>
+                                </tr>
+                                <tr className="bg-gradient-to-r from-emerald-50 to-teal-50 border-t-2 border-emerald-300">
+                                    <td colSpan="5" className="px-6 py-4 text-right">
+                                        <span className="text-lg font-black text-slate-800 uppercase tracking-wide">Daily Profit:</span>
+                                    </td>
+                                    <td className="px-6 py-4 text-right">
+                                        <span className={`inline-flex items-center justify-center text-2xl font-black ${dailyProfit >= 0 ? 'text-emerald-600' : 'text-red-600'}`}>
+                                            {dailyProfit >= 0 ? '₹' : '-₹'}{Math.abs(dailyProfit).toFixed(2)}
                                         </span>
                                     </td>
                                 </tr>
@@ -548,12 +587,15 @@ export default function StockTable() {
                             <thead>
                                 <tr className="bg-slate-50 border-b border-slate-200">
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm">Worker Name</th>
+                                    <th className="px-6 py-4 font-semibold text-purple-600 tracking-wide text-sm">Area</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm">Newspaper</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-28 text-center bg-blue-50/50">Today</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-24 text-center">MTD</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-24 text-center">YTD</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-32">Returned</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-24 text-center">Sold</th>
+                                    <th className="px-6 py-4 font-semibold text-red-600 tracking-wide text-sm w-28 text-center">Return Loss</th>
+                                    <th className="px-6 py-4 font-semibold text-teal-700 tracking-wide text-sm w-28 text-center">Total Taken</th>
                                     <th className="px-6 py-4 font-semibold text-slate-600 tracking-wide text-sm w-44">Paid Amount</th>
                                     <th className="px-6 py-4 w-12"></th>
                                 </tr>
@@ -561,7 +603,7 @@ export default function StockTable() {
                             <tbody className="divide-y divide-slate-100">
                                 {workerStock.length === 0 ? (
                                     <tr>
-                                        <td colSpan="9" className="px-6 py-8 text-center text-slate-400 italic">
+                                        <td colSpan="13" className="px-6 py-8 text-center text-slate-400 italic">
                                             No worker assignments recorded for this date. Click "Add Entry" to start.
                                         </td>
                                     </tr>
@@ -570,6 +612,12 @@ export default function StockTable() {
                                         const paper = newspapers.find(p => p.id === entry.newspaper_id);
                                         const sold = Math.max(0, (entry.taken || 0) - (entry.returned || 0));
                                         const isReturnInvalid = entry.returned > entry.taken;
+                                        const returnLoss = (entry.returned || 0) * (entry.base_price || (paper ? Number(paper.base_price) : 0));
+
+                                        // Calculate per-worker total taken (aggregate across all papers for this worker)
+                                        const workerTotalTaken = workerStock
+                                            .filter(s => s.worker_id === entry.worker_id)
+                                            .reduce((sum, s) => sum + (s.taken || 0), 0);
 
                                         // Calculate if total taken for this paper exceeds agency stock
                                         const totalPaperTaken = workerStock
@@ -590,6 +638,11 @@ export default function StockTable() {
                                                             <option key={w.id} value={w.id}>{w.username}</option>
                                                         ))}
                                                     </select>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <span className="text-sm text-purple-600 font-medium">
+                                                        {entry.worker_area || <span className="text-slate-300 italic">&mdash;</span>}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <select
@@ -642,6 +695,16 @@ export default function StockTable() {
                                                 </td>
                                                 <td className="px-6 py-4 text-center font-bold text-slate-600">
                                                     {sold}
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className={`font-bold text-sm ${returnLoss > 0 ? 'text-red-500' : 'text-slate-400'}`}>
+                                                        ₹{returnLoss.toFixed(2)}
+                                                    </span>
+                                                </td>
+                                                <td className="px-6 py-4 text-center">
+                                                    <span className="font-black text-teal-700 text-base">
+                                                        {workerTotalTaken}
+                                                    </span>
                                                 </td>
                                                 <td className="px-6 py-4">
                                                     <div className="relative">
